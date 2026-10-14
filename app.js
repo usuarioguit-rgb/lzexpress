@@ -46,7 +46,8 @@ function erroMsg(e){
 /* ---------- Login / cadastro ---------- */
 const imgLogo = new Image();
 imgLogo.onload = () => $("auth").classList.add("com-logo");
-imgLogo.src = "assets/fundo.png";
+imgLogo.src = "assets/fundo.png?v=2";
+
 function setModo(cad){
   modoCadastro = cad;
   $("aba-entrar").classList.toggle("ativa", !cad);
