@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { PIX_PAYLOAD } from "./pix.js";
 import * as cfg from "./config.js";
 const { firebaseConfig, ADMIN_EMAIL } = cfg;
 
@@ -82,7 +83,7 @@ $("btn-esqueci").onclick = async () => {
 $("ver-senha").onclick = () => {
   const ver = $("senha").type === "password";
   $("senha").type = ver ? "text" : "password";
-  $("ver-senha").textContent = ver ? "🙈 Ocultar" : "👁 Mostrar";
+  $("ver-senha").textContent = ver ? "Ocultar" : "Mostrar";
 };
 
 document.querySelectorAll("[data-sair]").forEach(b => b.onclick = () => signOut(auth));
@@ -170,16 +171,31 @@ function abaMot(h){
 }
 
 function iniciarMotorista(){
-  let primeira = true, online = false;
+  let primeira = true, online = false, histAtual = [];
   const btn = $("btn-online");
+  const atualizarApagar = () => {
+    $("btn-apagar").disabled = online || !histAtual.length;
+    $("aviso-apagar").textContent = "Fique offline para apagar o histórico.";
+    $("aviso-apagar").classList.toggle("hidden", !online || !histAtual.length);
+  };
   unsubs.push(onSnapshot(doc(db,"config","status"), s => {
     online = s.exists() && s.data().online === true;
     btn.className = "toggle " + (online ? "on" : "off");
     btn.textContent = online ? "🟢 ONLINE - toque para ficar offline" : "🔴 OFFLINE - toque para ficar online";
+    atualizarApagar();
   }));
   btn.onclick = () => setDoc(doc(db,"config","status"), { online: !online, atualizadoEm: serverTimestamp() }).catch(() => alert("Não foi possível mudar o status."));
   $("aba-ativos").onclick = () => abaMot(false);
   $("aba-hist").onclick = () => abaMot(true);
+  $("btn-apagar").onclick = async () => {
+    if (online || !histAtual.length) return;
+    if (!confirm("Apagar " + histAtual.length + " corridas do histórico? Isso não pode ser desfeito.")) return;
+    try {
+      const lote = writeBatch(db);
+      histAtual.forEach(c => lote.delete(doc(db,"chamados",c.id)));
+      await lote.commit();
+    } catch { alert("Não foi possível apagar. Tente de novo."); }
+  };
 
   unsubs.push(onSnapshot(query(collection(db,"chamados"), orderBy("criadoEm","desc"), limit(100)), snap => {
     if (!primeira && snap.docChanges().some(c => c.type === "added" && c.doc.data().status === "aguardando")) beep();
@@ -187,6 +203,7 @@ function iniciarMotorista(){
     const itens = snap.docs.map(d => ({id:d.id, ...d.data()}));
     const ativos = itens.filter(c => ["aguardando","aceito"].includes(c.status));
     const hist = itens.filter(c => !ativos.includes(c));
+    histAtual = hist; atualizarApagar();
     $("lista").innerHTML = ativos.length ? ativos.map(c => {
       const fone = (c.telefone||"").replace(/\D/g,"");
       return `<div class="chamado ${c.status==="aceito"?"aceito":""}">
@@ -204,7 +221,8 @@ function iniciarMotorista(){
     $("resumo").textContent = `Corridas finalizadas hoje: ${feitasHoje} · No histórico: ${hist.length}`;
     $("lista-hist").innerHTML = hist.length ? hist.map(c => `<div class="chamado ${c.status==="finalizado"?"aceito":"fim"}">
         <h3>${esc(c.nome)}</h3>
-        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}<br>${esc(c.telefone)}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}</div></div>`).join("")
+        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}<br>${esc(c.telefone)}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}</div>
+        ${c.status==="finalizado" ? `<div class="acoes"><button class="b-ok" data-pix="1" style="grid-column:1/3">💲 Receber por Pix</button></div>` : ""}</div>`).join("")
       : `<p class="vazio">Nenhuma corrida no histórico ainda.</p>`;
   }, e => alert("Erro ao carregar chamados: " + e.code)));
 }
@@ -212,7 +230,25 @@ $("lista").addEventListener("click", e => {
   const b = e.target.closest("button[data-id]"); if (!b) return;
   const extra = b.dataset.a === "aceito" ? { aceitoEm: serverTimestamp() } : { finalizadoEm: serverTimestamp() };
   updateDoc(doc(db,"chamados",b.dataset.id), { status:b.dataset.a, ...extra });
+  if (b.dataset.a === "finalizado") abaMot(true);
 });
+
+/* ---------- Pix ---------- */
+let qrFeito = false;
+$("lista-hist").addEventListener("click", e => {
+  if (!e.target.closest("[data-pix]")) return;
+  if (!qrFeito && window.QRCode) {
+    new QRCode($("pix-qr"), { text: PIX_PAYLOAD, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.M });
+    qrFeito = true;
+  } else if (!window.QRCode) { $("pix-qr").textContent = "Sem internet para gerar o QR. Use o botão abaixo para copiar o código Pix."; }
+  $("pix-tela").classList.remove("hidden");
+});
+$("pix-fechar").onclick = () => $("pix-tela").classList.add("hidden");
+$("pix-copiar").onclick = async () => {
+  try { await navigator.clipboard.writeText(PIX_PAYLOAD); $("pix-copiar").textContent = "Código copiado!"; }
+  catch { prompt("Copie o código Pix:", PIX_PAYLOAD); }
+  setTimeout(() => $("pix-copiar").textContent = "Copiar código Pix", 2000);
+};
 document.addEventListener("click", () => { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); }, { once:true });
 
 /* ---------- PWA ---------- */

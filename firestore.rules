@@ -22,6 +22,7 @@ service cloud.firestore {
         && request.resource.data.status == "aguardando"
         && motoOnline();
       allow read: if request.auth != null && (admin() || resource.data.uid == request.auth.uid);
+      allow delete: if admin() && resource.data.status in ["finalizado","cancelado"];
       allow update: if request.auth != null && (admin()
         || (resource.data.uid == request.auth.uid
             && request.resource.data.status == "cancelado"

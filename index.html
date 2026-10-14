@@ -29,7 +29,7 @@
       <label>Telefone (WhatsApp)</label><input id="telefone" type="tel" autocomplete="tel" placeholder="(91) 99999-9999">
     </div>
     <label>E-mail</label><input id="email" type="email" autocomplete="email" placeholder="seuemail@gmail.com">
-    <label>Senha</label><div class="senha-wrap"><input id="senha" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres"><button id="ver-senha" class="olho" type="button">👁 Mostrar</button></div>
+    <label>Senha</label><div class="senha-wrap"><input id="senha" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres"><button id="ver-senha" class="olho" type="button">Mostrar</button></div>
     <p id="erro" class="erro"></p>
     <button id="btn-auth" class="btn principal" type="button">Entrar</button>
     <button id="btn-esqueci" class="link" type="button">Esqueci minha senha</button>
@@ -59,12 +59,22 @@
     <button id="btn-online" class="toggle off" type="button">Carregando...</button>
     <div class="abas"><button id="aba-ativos" class="aba ativa" type="button">Chamados</button><button id="aba-hist" class="aba" type="button">Histórico</button></div>
     <div id="lista"></div>
-    <div id="hist" class="hidden"><p id="resumo" class="resumo"></p><div id="lista-hist"></div></div>
+    <div id="hist" class="hidden"><p id="resumo" class="resumo"></p>
+    <button id="btn-apagar" class="btn secundario" type="button">Apagar histórico</button><p id="aviso-apagar" class="dica hidden"></p><div id="lista-hist"></div></div>
   </main>
 </section>
 
+<div id="pix-tela" class="pix hidden"><div class="pix-card">
+  <h2>Pagar com Pix</h2><p class="sub">Abra o app do seu banco e leia o QR Code</p>
+  <div id="pix-qr" class="pix-qr"></div>
+  <p class="pix-nome">Leandro Vanzeler Vasconcelos<br>Mercado Pago</p>
+  <button id="pix-copiar" class="btn principal" type="button">Copiar código Pix</button>
+  <button id="pix-fechar" class="btn secundario" type="button">Fechar</button>
+</div></div>
+
 <div id="instalar" class="instalar hidden"><span>Instale o LZ EXPRESS no celular</span><button id="btn-instalar">Instalar</button></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
