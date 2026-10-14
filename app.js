@@ -1,7 +1,20 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, ADMIN_EMAIL } from "./config.js";
+import * as cfg from "./config.js";
+const { firebaseConfig, ADMIN_EMAIL } = cfg;
+
+// Avisa o motorista pelo ntfy.sh (notificação com o app fechado)
+async function avisarMotorista(nome){
+  if (!cfg.NTFY_TOPIC || cfg.NTFY_TOPIC.includes("COLE")) return;
+  try {
+    await fetch("https://ntfy.sh/", { method:"POST", body: JSON.stringify({
+      topic: cfg.NTFY_TOPIC, title: "LZ EXPRESS - Novo chamado!",
+      message: nome + " está chamando um moto táxi.", priority: 5, tags: ["motorcycle"],
+      click: location.origin + location.pathname
+    })});
+  } catch {}
+}
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -111,6 +124,7 @@ function iniciarCliente(user){
           lat:pos.coords.latitude, lng:pos.coords.longitude, precisao:Math.round(pos.coords.accuracy),
           status:"aguardando", criadoEm:serverTimestamp()
         });
+        avisarMotorista((u.nome||"Cliente").split(" ")[0]);
       } catch { alert("Não foi possível enviar o chamado. Tente de novo."); }
       btn.disabled = false;
     }, err => {
