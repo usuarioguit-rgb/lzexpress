@@ -22,7 +22,8 @@ const db = getFirestore(app);
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-let modoCadastro = false, unsub = null, audioCtx = null;
+let modoCadastro = false, unsubs = [], audioCtx = null;
+const parar = () => { unsubs.forEach(f => f()); unsubs = []; };
 
 function tela(id){ ["loading","auth","cliente","motorista"].forEach(t => $(t).classList.toggle("hidden", t !== id)); }
 function erroMsg(e){
@@ -78,10 +79,16 @@ $("btn-esqueci").onclick = async () => {
   catch (e) { $("erro").style.color = ""; $("erro").textContent = erroMsg(e); }
 };
 
+$("ver-senha").onclick = () => {
+  const ver = $("senha").type === "password";
+  $("senha").type = ver ? "text" : "password";
+  $("ver-senha").textContent = ver ? "🙈 Ocultar" : "👁 Mostrar";
+};
+
 document.querySelectorAll("[data-sair]").forEach(b => b.onclick = () => signOut(auth));
 
 onAuthStateChanged(auth, async user => {
-  if (unsub) { unsub(); unsub = null; }
+  parar();
   if (!user) { tela("auth"); return; }
   if (user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) { iniciarMotorista(); tela("motorista"); }
   else { iniciarCliente(user); tela("cliente"); }
@@ -96,19 +103,26 @@ const TEXTOS = {
 };
 function iniciarCliente(user){
   getDoc(doc(db,"users",user.uid)).then(s => { $("ola").textContent = "Olá, " + (s.exists() ? s.data().nome.split(" ")[0] : "") + "!"; }).catch(()=>{});
-  let ativo = null;
-  unsub = onSnapshot(query(collection(db,"chamados"), where("uid","==",user.uid)), snap => {
+  let ativo = null, online = null;
+  const atualizarBotao = () => {
+    $("btn-chamar").classList.toggle("hidden", !!ativo || online !== true);
+    $("aviso-offline").classList.toggle("hidden", !!ativo || online !== false);
+  };
+  unsubs.push(onSnapshot(doc(db,"config","status"),
+    s => { online = s.exists() && s.data().online === true; atualizarBotao(); },
+    () => { online = false; atualizarBotao(); }));
+  unsubs.push(onSnapshot(query(collection(db,"chamados"), where("uid","==",user.uid)), snap => {
     const todos = snap.docs.map(d => ({id:d.id, ...d.data()}));
     todos.sort((a,b) => (b.criadoEm?.seconds ?? 9e9) - (a.criadoEm?.seconds ?? 9e9));
     const ult = todos[0];
     ativo = ult && ["aguardando","aceito"].includes(ult.status) ? ult : null;
-    $("btn-chamar").classList.toggle("hidden", !!ativo);
+    atualizarBotao();
     $("btn-cancelar").classList.toggle("hidden", !(ativo && ativo.status === "aguardando"));
     if (!ult) { $("status").classList.add("hidden"); return; }
     const t = TEXTOS[ult.status] || TEXTOS.aguardando;
     $("status").className = "status " + t[2];
     $("status-titulo").textContent = t[0]; $("status-texto").textContent = t[1];
-  }, () => alert("Não foi possível carregar. Verifique a internet."));
+  }, () => alert("Não foi possível carregar. Verifique a internet.")));
 
   $("btn-cancelar").onclick = () => ativo && updateDoc(doc(db,"chamados",ativo.id), { status:"cancelado" });
   $("btn-chamar").onclick = async () => {
@@ -147,33 +161,57 @@ function beep(){
     navigator.vibrate && navigator.vibrate([300,150,300]);
   } catch {}
 }
-function hora(c){ return c.criadoEm ? new Date(c.criadoEm.seconds*1000).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : "agora"; }
+const fmt = (t, soHora) => !t ? "agora" : new Date(t.seconds*1000).toLocaleString("pt-BR",
+  soHora ? {hour:"2-digit",minute:"2-digit"} : {day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+const NOMES = {aguardando:"Aguardando",aceito:"Em andamento",finalizado:"Finalizada",cancelado:"Cancelada"};
+function abaMot(h){
+  $("aba-ativos").classList.toggle("ativa", !h); $("aba-hist").classList.toggle("ativa", h);
+  $("lista").classList.toggle("hidden", h); $("hist").classList.toggle("hidden", !h);
+}
 
 function iniciarMotorista(){
-  let primeira = true;
-  unsub = onSnapshot(query(collection(db,"chamados"), orderBy("criadoEm","desc"), limit(50)), snap => {
+  let primeira = true, online = false;
+  const btn = $("btn-online");
+  unsubs.push(onSnapshot(doc(db,"config","status"), s => {
+    online = s.exists() && s.data().online === true;
+    btn.className = "toggle " + (online ? "on" : "off");
+    btn.textContent = online ? "🟢 ONLINE - toque para ficar offline" : "🔴 OFFLINE - toque para ficar online";
+  }));
+  btn.onclick = () => setDoc(doc(db,"config","status"), { online: !online, atualizadoEm: serverTimestamp() }).catch(() => alert("Não foi possível mudar o status."));
+  $("aba-ativos").onclick = () => abaMot(false);
+  $("aba-hist").onclick = () => abaMot(true);
+
+  unsubs.push(onSnapshot(query(collection(db,"chamados"), orderBy("criadoEm","desc"), limit(100)), snap => {
     if (!primeira && snap.docChanges().some(c => c.type === "added" && c.doc.data().status === "aguardando")) beep();
     primeira = false;
     const itens = snap.docs.map(d => ({id:d.id, ...d.data()}));
-    $("lista").innerHTML = itens.length ? itens.map(c => {
-      const fim = ["finalizado","cancelado"].includes(c.status);
+    const ativos = itens.filter(c => ["aguardando","aceito"].includes(c.status));
+    const hist = itens.filter(c => !ativos.includes(c));
+    $("lista").innerHTML = ativos.length ? ativos.map(c => {
       const fone = (c.telefone||"").replace(/\D/g,"");
-      return `<div class="chamado ${c.status==="aceito"?"aceito":""} ${fim?"fim":""}">
+      return `<div class="chamado ${c.status==="aceito"?"aceito":""}">
         <h3>${esc(c.nome)}</h3>
-        <div class="info">${hora(c)} · ${esc(c.status)} · precisão ~${c.precisao ?? "?"} m<br>${esc(c.telefone)}</div>
-        ${fim ? "" : `<div class="acoes">
+        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} · precisão ~${c.precisao ?? "?"} m<br>${esc(c.telefone)}</div>
+        <div class="acoes">
           <a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">📍 Google Maps</a>
           <a class="b-waze" target="_blank" href="https://waze.com/ul?ll=${c.lat},${c.lng}&navigate=yes">🚗 Waze</a>
           <a class="b-zap" target="_blank" href="https://wa.me/55${fone}">💬 WhatsApp</a>
           ${c.status==="aguardando" ? `<button class="b-ok" data-a="aceito" data-id="${c.id}">✔ Aceitar</button>` : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">🏁 Finalizar</button>`}
-        </div>`}
-      </div>`;
+        </div></div>`;
     }).join("") : `<p class="vazio">Nenhum chamado por enquanto.</p>`;
-  }, e => alert("Erro ao carregar chamados: " + e.code));
+    const hoje = new Date().toDateString();
+    const feitasHoje = hist.filter(c => c.status === "finalizado" && c.criadoEm && new Date(c.criadoEm.seconds*1000).toDateString() === hoje).length;
+    $("resumo").textContent = `Corridas finalizadas hoje: ${feitasHoje} · No histórico: ${hist.length}`;
+    $("lista-hist").innerHTML = hist.length ? hist.map(c => `<div class="chamado ${c.status==="finalizado"?"aceito":"fim"}">
+        <h3>${esc(c.nome)}</h3>
+        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}<br>${esc(c.telefone)}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}</div></div>`).join("")
+      : `<p class="vazio">Nenhuma corrida no histórico ainda.</p>`;
+  }, e => alert("Erro ao carregar chamados: " + e.code)));
 }
 $("lista").addEventListener("click", e => {
   const b = e.target.closest("button[data-id]"); if (!b) return;
-  updateDoc(doc(db,"chamados",b.dataset.id), { status:b.dataset.a });
+  const extra = b.dataset.a === "aceito" ? { aceitoEm: serverTimestamp() } : { finalizadoEm: serverTimestamp() };
+  updateDoc(doc(db,"chamados",b.dataset.id), { status:b.dataset.a, ...extra });
 });
 document.addEventListener("click", () => { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); }, { once:true });
 

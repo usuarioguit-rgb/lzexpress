@@ -46,3 +46,10 @@ h2{font-size:28px;color:var(--azul)}
 .vazio{text-align:center;color:#7a7f8c;padding:40px 0}
 .instalar{position:fixed;left:12px;right:12px;bottom:12px;background:var(--azul);color:#fff;padding:12px 16px;border-radius:14px;display:flex;justify-content:space-between;align-items:center;font-size:15px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .instalar button{background:var(--ouro);border:0;border-radius:10px;padding:10px 18px;font-weight:800;color:var(--azul)}
+
+.senha-wrap{position:relative}.senha-wrap input{padding-right:112px}
+.olho{position:absolute;right:6px;top:6px;bottom:6px;border:0;border-radius:10px;background:#ece7d8;color:var(--azul);font-weight:700;font-size:15px;padding:0 12px}
+.aviso{background:#fdecea;color:var(--verm);border-left:8px solid var(--verm);padding:16px;border-radius:14px;font-size:18px;margin-bottom:16px}
+.toggle{width:100%;border:0;border-radius:16px;padding:20px 12px;font-size:19px;font-weight:900;color:#fff;margin-bottom:16px}
+.toggle.on{background:var(--verde)}.toggle.off{background:var(--verm)}
+.resumo{background:#ece7d8;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-weight:700;color:var(--azul)}

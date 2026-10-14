@@ -4,6 +4,14 @@ service cloud.firestore {
     function admin() {
       return request.auth != null && request.auth.token.email.lower() == "usuario.guit@gmail.com";
     }
+    function motoOnline() {
+      return exists(/databases/$(database)/documents/config/status)
+        && get(/databases/$(database)/documents/config/status).data.online == true;
+    }
+    match /config/{id} {
+      allow read: if request.auth != null;
+      allow write: if admin();
+    }
     match /users/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || admin());
       allow create, update: if request.auth != null && request.auth.uid == uid;
@@ -11,10 +19,13 @@ service cloud.firestore {
     match /chamados/{id} {
       allow create: if request.auth != null
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == "aguardando";
+        && request.resource.data.status == "aguardando"
+        && motoOnline();
       allow read: if request.auth != null && (admin() || resource.data.uid == request.auth.uid);
       allow update: if request.auth != null && (admin()
-        || (resource.data.uid == request.auth.uid && request.resource.data.status == "cancelado"));
+        || (resource.data.uid == request.auth.uid
+            && request.resource.data.status == "cancelado"
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])));
     }
   }
 }

@@ -29,7 +29,7 @@
       <label>Telefone (WhatsApp)</label><input id="telefone" type="tel" autocomplete="tel" placeholder="(91) 99999-9999">
     </div>
     <label>E-mail</label><input id="email" type="email" autocomplete="email" placeholder="seuemail@gmail.com">
-    <label>Senha</label><input id="senha" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres">
+    <label>Senha</label><div class="senha-wrap"><input id="senha" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres"><button id="ver-senha" class="olho" type="button">👁 Mostrar</button></div>
     <p id="erro" class="erro"></p>
     <button id="btn-auth" class="btn principal" type="button">Entrar</button>
     <button id="btn-esqueci" class="link" type="button">Esqueci minha senha</button>
@@ -42,6 +42,7 @@
   <main class="corpo">
     <h2 id="ola">Olá!</h2>
     <p class="sub">Precisa de uma moto? Toque no botão abaixo.</p>
+    <div id="aviso-offline" class="aviso hidden">🔴 O moto táxi está <b>offline</b> no momento. Tente de novo mais tarde.</div>
     <button id="btn-chamar" class="chamar" type="button"><span class="icone">🏍️</span>CHAMAR MOTO TÁXI</button>
     <div id="status" class="status hidden">
       <div id="status-titulo"></div><p id="status-texto"></p>
@@ -55,9 +56,10 @@
 <section id="motorista" class="tela hidden">
   <header class="barra"><div class="logo pequeno">LZ<span>EXPRESS</span> · Painel</div><button class="sair" data-sair>Sair</button></header>
   <main class="corpo">
-    <h2>Chamados</h2>
-    <p class="sub">Mantenha esta tela aberta para ouvir o alerta.</p>
+    <button id="btn-online" class="toggle off" type="button">Carregando...</button>
+    <div class="abas"><button id="aba-ativos" class="aba ativa" type="button">Chamados</button><button id="aba-hist" class="aba" type="button">Histórico</button></div>
     <div id="lista"></div>
+    <div id="hist" class="hidden"><p id="resumo" class="resumo"></p><div id="lista-hist"></div></div>
   </main>
 </section>
 
