@@ -43,9 +43,14 @@
     <h2 id="ola">Olá!</h2>
     <p class="sub">Precisa de uma moto? Toque no botão abaixo.</p>
     <div id="aviso-offline" class="aviso hidden">🔴 O moto táxi está <b>offline</b> no momento. Tente de novo mais tarde.</div>
-    <button id="btn-chamar" class="chamar" type="button"><span class="icone">🏍️</span>CHAMAR MOTO TÁXI</button>
+    <div id="bloco-chamar">
+      <label for="referencia">Ponto de referência (opcional)</label>
+      <input id="referencia" maxlength="120" placeholder="Ex.: em frente à padaria, portão azul">
+      <button id="btn-chamar" class="chamar" type="button"><span class="icone">🏍️</span>CHAMAR MOTO TÁXI</button>
+    </div>
     <div id="status" class="status hidden">
       <div id="status-titulo"></div><p id="status-texto"></p>
+      <a id="btn-zap-mot" class="btn principal hidden" target="_blank" rel="noopener">Falar com o motorista</a>
       <button id="btn-cancelar" class="btn secundario hidden" type="button">Cancelar chamado</button>
     </div>
     <p class="dica">Ao chamar, o aplicativo vai pedir para usar sua localização. Toque em <b>“Permitir”</b> para o moto táxi chegar até você.</p>
@@ -57,12 +62,20 @@
   <header class="barra"><div class="logo pequeno">LZ<span>EXPRESS</span> · Painel</div><button class="sair" data-sair>Sair</button></header>
   <main class="corpo">
     <button id="btn-online" class="toggle off" type="button">Carregando...</button>
-    <div class="abas"><button id="aba-ativos" class="aba ativa" type="button">Chamados</button><button id="aba-hist" class="aba" type="button">Histórico</button></div>
+    <div class="abas"><button id="aba-ativos" class="aba ativa" type="button">Chamados</button><button id="aba-hist" class="aba" type="button">Histórico</button><button id="aba-clientes" class="aba" type="button">Clientes</button></div>
     <div id="lista"></div>
+    <div id="clientes" class="hidden"><input id="busca-cliente" placeholder="Buscar por nome ou telefone"><div id="lista-clientes"></div></div>
     <div id="hist" class="hidden"><p id="resumo" class="resumo"></p>
     <button id="btn-apagar" class="btn secundario" type="button">Apagar histórico</button><p id="aviso-apagar" class="dica hidden"></p><div id="lista-hist"></div></div>
   </main>
 </section>
+
+<div id="cancel-tela" class="pix hidden"><div class="pix-card">
+  <h2>Cancelar chamado</h2><p class="sub">Escolha o motivo. O passageiro será avisado.</p>
+  <button class="btn secundario" data-motivo="nao_encontrado" type="button">Cliente não encontrado</button>
+  <button class="btn secundario" data-motivo="fora_area" type="button">Fora da área de atendimento</button>
+  <button class="btn principal" type="button">Voltar</button>
+</div></div>
 
 <div id="pix-tela" class="pix hidden"><div class="pix-card">
   <h2>Pagar com Pix</h2><p class="sub">Abra o app do seu banco e leia o QR Code</p>

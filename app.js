@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { PIX_PAYLOAD } from "./pix.js";
+import { MOTORISTA_NOME, MOTORISTA_ZAP } from "./motorista.js";
 import * as cfg from "./config.js";
 const { firebaseConfig, ADMIN_EMAIL } = cfg;
 
@@ -43,6 +44,9 @@ function erroMsg(e){
 }
 
 /* ---------- Login / cadastro ---------- */
+const imgLogo = new Image();
+imgLogo.onload = () => $("auth").classList.add("com-logo");
+imgLogo.src = "assets/fundo.png";
 function setModo(cad){
   modoCadastro = cad;
   $("aba-entrar").classList.toggle("ativa", !cad);
@@ -102,11 +106,21 @@ const TEXTOS = {
   finalizado:["Corrida finalizada","Obrigado por usar o LZ EXPRESS!","final"],
   cancelado:["Chamado cancelado","Você pode chamar novamente quando quiser.","final"]
 };
+const MOTIVOS_CLIENTE = {
+  nao_encontrado:"Não conseguimos te encontrar. Chame de novo e escreva um ponto de referência.",
+  fora_area:"Desculpe, seu local está fora da área de atendimento."
+};
+function textoStatus(c){
+  if (c.status === "aguardando" && c.aviso === "aguardar") return ["Aguarde um pouquinho","O moto táxi está terminando outra corrida. Pode aguardar, já vamos até você!",""];
+  if (c.status === "aceito") return ["Moto a caminho! 🏍️", MOTORISTA_NOME + " aceitou seu chamado e está indo até você. Fique no local.","aceito"];
+  if (c.status === "cancelado" && MOTIVOS_CLIENTE[c.motivo]) return ["Chamado cancelado", MOTIVOS_CLIENTE[c.motivo], "final"];
+  return TEXTOS[c.status] || TEXTOS.aguardando;
+}
 function iniciarCliente(user){
   getDoc(doc(db,"users",user.uid)).then(s => { $("ola").textContent = "Olá, " + (s.exists() ? s.data().nome.split(" ")[0] : "") + "!"; }).catch(()=>{});
   let ativo = null, online = null;
   const atualizarBotao = () => {
-    $("btn-chamar").classList.toggle("hidden", !!ativo || online !== true);
+    $("bloco-chamar").classList.toggle("hidden", !!ativo || online !== true);
     $("aviso-offline").classList.toggle("hidden", !!ativo || online !== false);
   };
   unsubs.push(onSnapshot(doc(db,"config","status"),
@@ -120,9 +134,12 @@ function iniciarCliente(user){
     atualizarBotao();
     $("btn-cancelar").classList.toggle("hidden", !(ativo && ativo.status === "aguardando"));
     if (!ult) { $("status").classList.add("hidden"); return; }
-    const t = TEXTOS[ult.status] || TEXTOS.aguardando;
+    const t = textoStatus(ult);
     $("status").className = "status " + t[2];
     $("status-titulo").textContent = t[0]; $("status-texto").textContent = t[1];
+    const zap = String(MOTORISTA_ZAP || "").replace(/\D/g,"");
+    $("btn-zap-mot").classList.toggle("hidden", !(ult.status === "aceito" && zap));
+    $("btn-zap-mot").href = "https://wa.me/" + zap;
   }, () => alert("Não foi possível carregar. Verifique a internet.")));
 
   $("btn-cancelar").onclick = () => ativo && updateDoc(doc(db,"chamados",ativo.id), { status:"cancelado" });
@@ -135,11 +152,12 @@ function iniciarCliente(user){
         const s = await getDoc(doc(db,"users",user.uid));
         const u = s.exists() ? s.data() : {nome:"Cliente", telefone:""};
         await addDoc(collection(db,"chamados"), {
-          uid:user.uid, nome:u.nome, telefone:u.telefone,
+          uid:user.uid, nome:u.nome, telefone:u.telefone, referencia:$("referencia").value.trim().slice(0,120),
           lat:pos.coords.latitude, lng:pos.coords.longitude, precisao:Math.round(pos.coords.accuracy),
           status:"aguardando", criadoEm:serverTimestamp()
         });
         avisarMotorista((u.nome||"Cliente").split(" ")[0]);
+        $("referencia").value = "";
       } catch { alert("Não foi possível enviar o chamado. Tente de novo."); }
       btn.disabled = false;
     }, err => {
@@ -164,10 +182,12 @@ function beep(){
 }
 const fmt = (t, soHora) => !t ? "agora" : new Date(t.seconds*1000).toLocaleString("pt-BR",
   soHora ? {hour:"2-digit",minute:"2-digit"} : {day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+const MOT_TXT = {nao_encontrado:"cliente não encontrado", fora_area:"fora da área"};
 const NOMES = {aguardando:"Aguardando",aceito:"Em andamento",finalizado:"Finalizada",cancelado:"Cancelada"};
-function abaMot(h){
-  $("aba-ativos").classList.toggle("ativa", !h); $("aba-hist").classList.toggle("ativa", h);
-  $("lista").classList.toggle("hidden", h); $("hist").classList.toggle("hidden", !h);
+function abaMot(qual){
+  [["ativos","aba-ativos","lista"],["hist","aba-hist","hist"],["clientes","aba-clientes","clientes"]].forEach(([n,aba,box]) => {
+    $(aba).classList.toggle("ativa", n === qual); $(box).classList.toggle("hidden", n !== qual);
+  });
 }
 
 function iniciarMotorista(){
@@ -185,8 +205,25 @@ function iniciarMotorista(){
     atualizarApagar();
   }));
   btn.onclick = () => setDoc(doc(db,"config","status"), { online: !online, atualizadoEm: serverTimestamp() }).catch(() => alert("Não foi possível mudar o status."));
-  $("aba-ativos").onclick = () => abaMot(false);
-  $("aba-hist").onclick = () => abaMot(true);
+  $("aba-ativos").onclick = () => abaMot("ativos");
+  $("aba-hist").onclick = () => abaMot("hist");
+  $("aba-clientes").onclick = () => abaMot("clientes");
+  let clientes = [];
+  const mostrarClientes = () => {
+    const q = $("busca-cliente").value.trim().toLowerCase();
+    const lista = clientes.filter(c => !q || (c.nome||"").toLowerCase().includes(q) || (c.telefone||"").includes(q));
+    $("lista-clientes").innerHTML = lista.length ? lista.map(c => {
+      const fone = (c.telefone||"").replace(/\D/g,"");
+      return `<div class="chamado aceito"><h3>${esc(c.nome)}</h3><div class="info">${esc(c.telefone)}</div>
+        <div class="acoes"><a class="b-zap" target="_blank" href="https://wa.me/55${fone}" style="grid-column:1/3">💬 WhatsApp</a></div></div>`;
+    }).join("") : `<p class="vazio">Nenhum cliente encontrado.</p>`;
+  };
+  $("busca-cliente").oninput = mostrarClientes;
+  unsubs.push(onSnapshot(collection(db,"users"), snap => {
+    clientes = snap.docs.map(d => d.data()).filter(c => (c.email||"").toLowerCase() !== ADMIN_EMAIL.toLowerCase())
+      .sort((a,b) => (a.nome||"").localeCompare(b.nome||"","pt-BR"));
+    mostrarClientes();
+  }, () => {}));
   $("btn-apagar").onclick = async () => {
     if (online || !histAtual.length) return;
     if (!confirm("Apagar " + histAtual.length + " corridas do histórico? Isso não pode ser desfeito.")) return;
@@ -209,11 +246,14 @@ function iniciarMotorista(){
       return `<div class="chamado ${c.status==="aceito"?"aceito":""}">
         <h3>${esc(c.nome)}</h3>
         <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} · precisão ~${c.precisao ?? "?"} m<br>${esc(c.telefone)}</div>
+        ${c.referencia ? `<div class="ref">📌 Referência: ${esc(c.referencia)}</div>` : ""}
         <div class="acoes">
           <a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">📍 Google Maps</a>
           <a class="b-waze" target="_blank" href="https://waze.com/ul?ll=${c.lat},${c.lng}&navigate=yes">🚗 Waze</a>
           <a class="b-zap" target="_blank" href="https://wa.me/55${fone}">💬 WhatsApp</a>
           ${c.status==="aguardando" ? `<button class="b-ok" data-a="aceito" data-id="${c.id}">✔ Aceitar</button>` : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">🏁 Finalizar</button>`}
+          ${c.status==="aguardando" ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"⏳ Cliente avisado para aguardar":"⏳ Estou em outra corrida"}</button>` : ""}
+          <button class="b-cancel" data-a="cancelar" data-id="${c.id}" style="grid-column:1/3">✖ Cancelar chamado</button>
         </div></div>`;
     }).join("") : `<p class="vazio">Nenhum chamado por enquanto.</p>`;
     const hoje = new Date().toDateString();
@@ -221,16 +261,25 @@ function iniciarMotorista(){
     $("resumo").textContent = `Corridas finalizadas hoje: ${feitasHoje} · No histórico: ${hist.length}`;
     $("lista-hist").innerHTML = hist.length ? hist.map(c => `<div class="chamado ${c.status==="finalizado"?"aceito":"fim"}">
         <h3>${esc(c.nome)}</h3>
-        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}<br>${esc(c.telefone)}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}</div>
+        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}${MOT_TXT[c.motivo] ? " ("+MOT_TXT[c.motivo]+")" : ""}<br>${esc(c.telefone)}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}</div>
         ${c.status==="finalizado" ? `<div class="acoes"><button class="b-ok" data-pix="1" style="grid-column:1/3">💲 Receber por Pix</button></div>` : ""}</div>`).join("")
       : `<p class="vazio">Nenhuma corrida no histórico ainda.</p>`;
   }, e => alert("Erro ao carregar chamados: " + e.code)));
 }
+let cancelId = null;
 $("lista").addEventListener("click", e => {
   const b = e.target.closest("button[data-id]"); if (!b) return;
-  const extra = b.dataset.a === "aceito" ? { aceitoEm: serverTimestamp() } : { finalizadoEm: serverTimestamp() };
-  updateDoc(doc(db,"chamados",b.dataset.id), { status:b.dataset.a, ...extra });
-  if (b.dataset.a === "finalizado") abaMot(true);
+  const a = b.dataset.a, ref = doc(db,"chamados",b.dataset.id);
+  if (a === "cancelar") { cancelId = b.dataset.id; $("cancel-tela").classList.remove("hidden"); return; }
+  if (a === "aguardar") { updateDoc(ref, { aviso:"aguardar" }); return; }
+  const extra = a === "aceito" ? { aceitoEm: serverTimestamp(), aviso:"" } : { finalizadoEm: serverTimestamp() };
+  updateDoc(ref, { status:a, ...extra });
+  if (a === "finalizado") abaMot("hist");
+});
+$("cancel-tela").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.motivo && cancelId) updateDoc(doc(db,"chamados",cancelId), { status:"cancelado", motivo:b.dataset.motivo, finalizadoEm: serverTimestamp() });
+  cancelId = null; $("cancel-tela").classList.add("hidden");
 });
 
 /* ---------- Pix ---------- */
