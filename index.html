@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B1F3A">
+<title>LZ EXPRESS</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- CARREGANDO -->
+<section id="loading" class="tela center"><div class="logo">LZ<span>EXPRESS</span></div><p>Carregando...</p></section>
+
+<!-- LOGIN / CADASTRO -->
+<section id="auth" class="tela hidden">
+  <div class="topo"><div class="logo">LZ<span>EXPRESS</span></div><p class="sub">Moto táxi rápido e seguro</p></div>
+  <div class="card">
+    <div class="abas">
+      <button id="aba-entrar" class="aba ativa" type="button">Entrar</button>
+      <button id="aba-criar" class="aba" type="button">Criar conta</button>
+    </div>
+    <div id="campos-cadastro" class="hidden">
+      <label>Seu nome</label><input id="nome" autocomplete="name" placeholder="Ex.: Maria Silva">
+      <label>Telefone (WhatsApp)</label><input id="telefone" type="tel" autocomplete="tel" placeholder="(91) 99999-9999">
+    </div>
+    <label>E-mail</label><input id="email" type="email" autocomplete="email" placeholder="seuemail@gmail.com">
+    <label>Senha</label><input id="senha" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres">
+    <p id="erro" class="erro"></p>
+    <button id="btn-auth" class="btn principal" type="button">Entrar</button>
+    <button id="btn-esqueci" class="link" type="button">Esqueci minha senha</button>
+  </div>
+</section>
+
+<!-- CLIENTE -->
+<section id="cliente" class="tela hidden">
+  <header class="barra"><div class="logo pequeno">LZ<span>EXPRESS</span></div><button class="sair" data-sair>Sair</button></header>
+  <main class="corpo">
+    <h2 id="ola">Olá!</h2>
+    <p class="sub">Precisa de uma moto? Toque no botão abaixo.</p>
+    <button id="btn-chamar" class="chamar" type="button"><span class="icone">🏍️</span>CHAMAR MOTO TÁXI</button>
+    <div id="status" class="status hidden">
+      <div id="status-titulo"></div><p id="status-texto"></p>
+      <button id="btn-cancelar" class="btn secundario hidden" type="button">Cancelar chamado</button>
+    </div>
+    <p class="dica">Ao chamar, o aplicativo vai pedir para usar sua localização. Toque em <b>“Permitir”</b> para o moto táxi chegar até você.</p>
+  </main>
+</section>
+
+<!-- MOTORISTA -->
+<section id="motorista" class="tela hidden">
+  <header class="barra"><div class="logo pequeno">LZ<span>EXPRESS</span> · Painel</div><button class="sair" data-sair>Sair</button></header>
+  <main class="corpo">
+    <h2>Chamados</h2>
+    <p class="sub">Mantenha esta tela aberta para ouvir o alerta.</p>
+    <div id="lista"></div>
+  </main>
+</section>
+
+<div id="instalar" class="instalar hidden"><span>Instale o LZ EXPRESS no celular</span><button id="btn-instalar">Instalar</button></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+:root{--azul:#0B1F3A;--azul2:#14315A;--ouro:#D4A63A;--ouro2:#F0C75E;--fundo:#F5F2EA;--texto:#1B2433;--verde:#2E7D5B;--verm:#B3382C}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--fundo);color:var(--texto);font-size:18px;min-height:100vh}
+.hidden{display:none!important}
+.tela{min-height:100vh;display:flex;flex-direction:column}
+.center{align-items:center;justify-content:center;background:var(--azul);color:#fff}
+.logo{font-weight:800;font-size:44px;letter-spacing:2px;color:var(--ouro);line-height:1}
+.logo span{display:block;font-size:16px;letter-spacing:8px;color:#fff;margin-top:6px;font-weight:600}
+.logo.pequeno{font-size:22px;display:flex;gap:8px;align-items:baseline}.logo.pequeno span{display:inline;font-size:13px;letter-spacing:3px;margin:0}
+#auth{background:linear-gradient(180deg,var(--azul) 0,var(--azul) 34%,var(--fundo) 34%)}
+.topo{padding:44px 24px 28px;text-align:center;color:#fff}
+.topo .logo span{text-align:center}
+.topo .sub{color:#cfd7e6;margin-top:14px;font-size:16px}
+.card{background:#fff;margin:0 16px 24px;padding:20px;border-radius:20px;box-shadow:0 10px 30px rgba(11,31,58,.18)}
+.abas{display:flex;background:#ece7d8;border-radius:14px;padding:4px;margin-bottom:12px}
+.aba{flex:1;border:0;background:none;padding:14px;font-size:17px;font-weight:700;color:#6b6552;border-radius:11px}
+.aba.ativa{background:var(--azul);color:#fff}
+label{display:block;font-weight:700;margin:14px 0 6px;font-size:16px}
+input{width:100%;padding:16px;font-size:18px;border:2px solid #d9d3c0;border-radius:14px;background:#fffdf8;outline:none}
+input:focus{border-color:var(--ouro)}
+.erro{color:var(--verm);font-weight:600;margin-top:12px;min-height:22px;font-size:16px}
+.btn{width:100%;border:0;padding:18px;font-size:19px;font-weight:800;border-radius:14px;margin-top:8px}
+.btn.principal{background:var(--azul);color:var(--ouro2)}
+.btn.secundario{background:#fff;color:var(--verm);border:2px solid var(--verm)}
+.link{width:100%;background:none;border:0;color:var(--azul2);font-size:16px;padding:16px;text-decoration:underline}
+.barra{background:var(--azul);padding:16px 18px;display:flex;justify-content:space-between;align-items:center}
+.sair{background:none;border:2px solid var(--ouro);color:var(--ouro2);padding:8px 16px;border-radius:10px;font-size:15px;font-weight:700}
+.corpo{padding:24px 18px;flex:1}
+h2{font-size:28px;color:var(--azul)}
+.sub{color:#5b6478;margin:6px 0 22px;font-size:17px}
+.chamar{width:100%;border:0;border-radius:24px;padding:38px 16px;font-size:26px;font-weight:900;background:linear-gradient(160deg,var(--ouro2),var(--ouro));color:var(--azul);box-shadow:0 12px 28px rgba(212,166,58,.45);display:flex;flex-direction:column;align-items:center;gap:10px}
+.chamar:active{transform:scale(.98)}.chamar:disabled{opacity:.6}
+.icone{font-size:56px}
+.status{margin-top:22px;background:#fff;border-radius:18px;padding:20px;border-left:8px solid var(--ouro);box-shadow:0 6px 18px rgba(0,0,0,.08)}
+#status-titulo{font-size:22px;font-weight:800;color:var(--azul)}
+#status-texto{margin:8px 0 6px;color:#4a5265}
+.status.aceito{border-color:var(--verde)}.status.final{border-color:#8a8a8a}
+.dica{margin-top:26px;font-size:15px;color:#5b6478;line-height:1.5;background:#ece7d8;padding:14px;border-radius:12px}
+.chamado{background:#fff;border-radius:18px;padding:18px;margin-bottom:14px;border-left:8px solid var(--ouro);box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.chamado.aceito{border-color:var(--verde)}.chamado.fim{opacity:.55;border-color:#999}
+.chamado h3{color:var(--azul);font-size:21px}
+.chamado .info{color:#5b6478;font-size:15px;margin:4px 0 12px}
+.acoes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.acoes a,.acoes button{border:0;border-radius:12px;padding:14px 6px;font-size:16px;font-weight:800;text-align:center;text-decoration:none;color:#fff}
+.b-mapa{background:var(--azul)}.b-waze{background:#2b8fd1}.b-zap{background:#25a35a}.b-ok{background:var(--verde)}.b-fim{background:#6b6552}
+.vazio{text-align:center;color:#7a7f8c;padding:40px 0}
+.instalar{position:fixed;left:12px;right:12px;bottom:12px;background:var(--azul);color:#fff;padding:12px 16px;border-radius:14px;display:flex;justify-content:space-between;align-items:center;font-size:15px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.instalar button{background:var(--ouro);border:0;border-radius:10px;padding:10px 18px;font-weight:800;color:var(--azul)}

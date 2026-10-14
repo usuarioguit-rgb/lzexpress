@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function admin() {
+      return request.auth != null && request.auth.token.email.lower() == "usuario.guit@gmail.com";
+    }
+    match /users/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || admin());
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+    }
+    match /chamados/{id} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == "aguardando";
+      allow read: if request.auth != null && (admin() || resource.data.uid == request.auth.uid);
+      allow update: if request.auth != null && (admin()
+        || (resource.data.uid == request.auth.uid && request.resource.data.status == "cancelado"));
+    }
+  }
+}
