@@ -10,3 +10,4 @@ export const firebaseConfig = {
 
 // 2) Seu e-mail de motorista (o mesmo que você vai cadastrar no app)
 export const ADMIN_EMAIL = "usuario.guit@gmail.com";
+   export const NTFY_TOPIC = "lzexpress-k60iblwglm4ya0";
