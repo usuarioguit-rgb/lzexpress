@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { PIX_PAYLOAD } from "./pix.js";
 import { MOTORISTA_NOME, MOTORISTA_ZAP } from "./motorista.js";
 import * as cfg from "./config.js";
@@ -118,7 +118,7 @@ function textoStatus(c){
   return TEXTOS[c.status] || TEXTOS.aguardando;
 }
 function iniciarCliente(user){
-  getDoc(doc(db,"users",user.uid)).then(s => { $("ola").textContent = "Olá, " + (s.exists() ? s.data().nome.split(" ")[0] : "") + "!"; }).catch(()=>{});
+  getDoc(doc(db,"users",user.uid)).then(s => { $("ola").textContent = s.exists() ? "Olá, " + s.data().nome.split(" ")[0] + "!" : "Olá!"; }).catch(()=>{});
   let ativo = null, online = null;
   const atualizarBotao = () => {
     $("bloco-chamar").classList.toggle("hidden", !!ativo || online !== true);
@@ -151,7 +151,16 @@ function iniciarCliente(user){
     navigator.geolocation.getCurrentPosition(async pos => {
       try {
         const s = await getDoc(doc(db,"users",user.uid));
-        const u = s.exists() ? s.data() : {nome:"Cliente", telefone:""};
+        let u;
+        if (s.exists()) u = s.data();
+        else {
+          const nome = (prompt("Digite seu nome:") || "").trim();
+          const telefone = (prompt("Digite seu telefone (WhatsApp):") || "").trim();
+          if (!nome || !telefone) { btn.disabled = false; return; }
+          u = { nome, telefone, email: user.email };
+          await setDoc(doc(db,"users",user.uid), { ...u, criadoEm: serverTimestamp() });
+          $("ola").textContent = "Olá, " + nome.split(" ")[0] + "!";
+        }
         await addDoc(collection(db,"chamados"), {
           uid:user.uid, nome:u.nome, telefone:u.telefone, referencia:$("referencia").value.trim().slice(0,120),
           lat:pos.coords.latitude, lng:pos.coords.longitude, precisao:Math.round(pos.coords.accuracy),
@@ -216,12 +225,18 @@ function iniciarMotorista(){
     $("lista-clientes").innerHTML = lista.length ? lista.map(c => {
       const fone = (c.telefone||"").replace(/\D/g,"");
       return `<div class="chamado aceito"><h3>${esc(c.nome)}</h3><div class="info">${esc(c.telefone)}</div>
-        <div class="acoes"><a class="b-zap" target="_blank" href="https://wa.me/55${fone}" style="grid-column:1/3">💬 WhatsApp</a></div></div>`;
+        <div class="acoes"><a class="b-zap" target="_blank" href="https://wa.me/55${fone}">💬 WhatsApp</a>
+        <button class="b-cancel" data-del="${c.id}" data-nome="${esc(c.nome)}" type="button">🗑 Apagar</button></div></div>`;
     }).join("") : `<p class="vazio">Nenhum cliente encontrado.</p>`;
   };
   $("busca-cliente").oninput = mostrarClientes;
+  $("lista-clientes").onclick = e => {
+    const b = e.target.closest("[data-del]"); if (!b) return;
+    if (!confirm("Apagar " + b.dataset.nome + " dos contatos?")) return;
+    deleteDoc(doc(db,"users",b.dataset.del)).catch(() => alert("Não foi possível apagar. Tente de novo."));
+  };
   unsubs.push(onSnapshot(collection(db,"users"), snap => {
-    clientes = snap.docs.map(d => d.data()).filter(c => (c.email||"").toLowerCase() !== ADMIN_EMAIL.toLowerCase())
+    clientes = snap.docs.map(d => ({id:d.id, ...d.data()})).filter(c => (c.email||"").toLowerCase() !== ADMIN_EMAIL.toLowerCase())
       .sort((a,b) => (a.nome||"").localeCompare(b.nome||"","pt-BR"));
     mostrarClientes();
   }, () => {}));
