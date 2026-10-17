@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -62,8 +62,20 @@
   <header class="barra"><div class="logo pequeno">LZ<span>EXPRESS</span> · Painel</div><button class="sair" data-sair>Sair</button></header>
   <main class="corpo">
     <button id="btn-online" class="toggle off" type="button">Carregando...</button>
-    <div class="abas"><button id="aba-ativos" class="aba ativa" type="button">Chamados</button><button id="aba-hist" class="aba" type="button">Histórico</button><button id="aba-clientes" class="aba" type="button">Clientes</button></div>
+    <div class="abas"><button id="aba-ativos" class="aba ativa" type="button">Chamados</button><button id="aba-hist" class="aba" type="button">Histórico</button><button id="aba-clientes" class="aba hidden" type="button">Clientes</button><button id="aba-motoristas" class="aba hidden" type="button">Motoristas</button></div>
     <div id="lista"></div>
+    <div id="motoristas" class="hidden">
+      <div class="card"><h3>Cadastrar motorista</h3>
+        <label>Nome</label><input id="m-nome" placeholder="Nome do motoboy">
+        <label>WhatsApp</label><input id="m-telefone" type="tel" placeholder="(91) 99999-9999">
+        <label>E-mail de login</label><input id="m-email" type="email" placeholder="motoboy@gmail.com">
+        <label>Senha (mínimo 6)</label><input id="m-senha" placeholder="Senha do motoboy">
+        <label>Chave Pix dele</label><input id="m-pix" placeholder="CPF, e-mail, +55... ou chave aleatória">
+        <p id="m-erro" class="erro"></p>
+        <button id="btn-cad-mot" class="btn principal" type="button">Cadastrar motorista</button>
+      </div>
+      <div id="lista-motoristas"></div>
+    </div>
     <div id="clientes" class="hidden"><input id="busca-cliente" placeholder="Buscar por nome ou telefone"><div id="lista-clientes"></div></div>
     <div id="hist" class="hidden"><p id="resumo" class="resumo"></p>
     <button id="btn-apagar" class="btn secundario" type="button">Apagar histórico</button><p id="aviso-apagar" class="dica hidden"></p><div id="lista-hist"></div></div>
@@ -74,13 +86,18 @@
   <h2>Cancelar chamado</h2><p class="sub">Escolha o motivo. O passageiro será avisado.</p>
   <button class="btn secundario" data-motivo="nao_encontrado" type="button">Cliente não encontrado</button>
   <button class="btn secundario" data-motivo="fora_area" type="button">Fora da área de atendimento</button>
+  <button class="btn secundario" data-motivo="sem_resposta" type="button">Cliente não respondeu</button>
+  <button class="btn secundario" data-motivo="indisponivel" type="button">Sem moto disponível agora</button>
+  <button class="btn secundario" data-motivo="problema_moto" type="button">Problema com a moto</button>
+  <button class="btn secundario" data-motivo="duplicado" type="button">Chamado duplicado</button>
+  <button class="btn secundario" data-motivo="desistiu" type="button">Cliente desistiu</button>
   <button class="btn principal" type="button">Voltar</button>
 </div></div>
 
 <div id="pix-tela" class="pix hidden"><div class="pix-card">
   <h2>Pagar com Pix</h2><p class="sub">Abra o app do seu banco e leia o QR Code</p>
   <div id="pix-qr" class="pix-qr"></div>
-  <p class="pix-nome">Leandro Vanzeler Vasconcelos<br>Mercado Pago</p>
+  <p id="pix-nome" class="pix-nome"></p>
   <button id="pix-copiar" class="btn principal" type="button">Copiar código Pix</button>
   <button id="pix-fechar" class="btn secundario" type="button">Fechar</button>
 </div></div>
@@ -88,6 +105,6 @@
 <div id="instalar" class="instalar hidden"><span>Instale o LZ EXPRESS no celular</span><button id="btn-instalar">Instalar</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=3"></script>
+<script type="module" src="app.js?v=4"></script>
 </body>
 </html>

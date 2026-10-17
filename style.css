@@ -72,3 +72,6 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .com-logo .topo .logo{display:none}
 #auth.com-logo{background:linear-gradient(180deg,var(--azul) 0,var(--azul) 270px,var(--fundo) 270px)}
 .com-logo .topo .sub{display:none}
+#motorista .aba{font-size:13px;padding:12px 2px}
+#motoristas .card{margin:0 0 18px;padding:16px}
+#motoristas h3{color:var(--azul);margin-bottom:4px}
