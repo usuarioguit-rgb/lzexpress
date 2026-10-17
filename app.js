@@ -25,7 +25,7 @@ const db = getFirestore(app);
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-let EU = null; const fones = {};
+let EU = null, cadastrando = null; const fones = {};
 let modoCadastro = false, unsubs = [], audioCtx = null;
 const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); };
 
@@ -71,6 +71,7 @@ $("btn-auth").onclick = async () => {
   $("btn-auth").disabled = true;
   try {
     if (modoCadastro) {
+      cadastrando = { nome, telefone, email };
       const c = await createUserWithEmailAndPassword(auth, email, senha);
       await setDoc(doc(db, "users", c.user.uid), { nome, telefone, email, criadoEm: serverTimestamp() });
     } else {
@@ -112,6 +113,10 @@ onAuthStateChanged(auth, async user => {
       tela("motorista"); return;
     }
   } catch {}
+  if (cadastrando) {
+    const p = cadastrando; cadastrando = null;
+    try { await setDoc(doc(db,"users",user.uid), { ...p, criadoEm: serverTimestamp() }); } catch {}
+  }
   iniciarCliente(user); tela("cliente");
 });
 
@@ -174,16 +179,7 @@ function iniciarCliente(user){
     navigator.geolocation.getCurrentPosition(async pos => {
       try {
         const s = await getDoc(doc(db,"users",user.uid));
-        let u;
-        if (s.exists()) u = s.data();
-        else {
-          const nome = (prompt("Digite seu nome:") || "").trim();
-          const telefone = (prompt("Digite seu telefone (WhatsApp):") || "").trim();
-          if (!nome || !telefone) { btn.disabled = false; return; }
-          u = { nome, telefone, email: user.email };
-          await setDoc(doc(db,"users",user.uid), { ...u, criadoEm: serverTimestamp() });
-          $("ola").textContent = "Olá, " + nome.split(" ")[0] + "!";
-        }
+        const u = s.exists() ? s.data() : { nome: user.email.split("@")[0].replace(/[._-]+/g," ").replace(/\b\w/g, l => l.toUpperCase()), telefone: "" };
         const ch = doc(collection(db,"chamados")), lote = writeBatch(db);
         lote.set(ch, {
           uid:user.uid, nome:u.nome, referencia:$("referencia").value.trim().slice(0,120),
