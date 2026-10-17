@@ -9,7 +9,8 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="stylesheet" href="style.css?v=6">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 
@@ -40,24 +41,24 @@
 <section id="cliente" class="tela hidden">
   <header class="barra"><div class="logo pequeno">LZ<span>EXPRESS</span></div><button class="sair" data-sair>Sair</button></header>
   <main class="corpo">
+    <div id="selo-online" class="selo hidden"><i></i>Motoristas disponíveis agora</div>
     <h2 id="ola">Olá!</h2>
-    <p class="sub">Precisa de uma moto? Toque no botão abaixo.</p>
+    <p class="sub">Precisa de uma moto? É só chamar.</p>
     <div id="aviso-offline" class="aviso hidden">🔴 O moto táxi está <b>offline</b> no momento. Tente de novo mais tarde.</div>
     <div id="bloco-chamar">
       <label for="referencia">Ponto de referência (opcional)</label>
-      <input id="referencia" maxlength="120" placeholder="Ex.: em frente à padaria, portão azul">
-      <button id="btn-chamar" class="chamar" type="button"><span class="icone">🏍️</span>CHAMAR MOTO TÁXI</button>
+      <div class="campo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><input id="referencia" maxlength="120" placeholder="Ex.: em frente à padaria, portão azul"></div>
+      <button id="btn-chamar" class="chamar" type="button"><span class="t">CHAMAR MOTO TÁXI</span><span class="s">Toque e um motorista vai até você</span></button>
     </div>
     <div id="status" class="status hidden">
       <div id="status-titulo"></div><p id="status-texto"></p>
       <button id="btn-chat-cli" class="btn principal hidden" type="button">💬 Conversar com o motorista</button>
       <button id="btn-cancelar" class="btn secundario hidden" type="button">Cancelar chamado</button>
     </div>
-    <p class="dica">Ao chamar, o aplicativo vai pedir para usar sua localização. Toque em <b>“Permitir”</b> para o moto táxi chegar até você.</p>
-    <button class="btn neutro" data-share type="button">📲 Compartilhar o app</button>
-    <div id="bloco-trabalhe" class="trabalhe hidden"><b>Quer trabalhar com a gente?</b>
-      <p>Seja motorista parceiro do LZ EXPRESS e receba chamados pelo app.</p>
-      <a id="btn-trabalhe" class="btn neutro" target="_blank" rel="noopener">💬 Falar com o administrador</a></div>
+    <div class="dica info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><p>Ao chamar, toque em <b>“Permitir”</b> quando o celular pedir sua localização, para o moto táxi chegar até você.</p></div>
+    <button class="btn neutro" data-share type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4M8.6 13.3l6.8 4"/></svg>Compartilhar o app</button>
+    <div id="bloco-trabalhe" class="trabalhe hidden"><div class="tr-topo"><span class="tr-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a1b3a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-5.4A8 8 0 1 1 21 12z"/></svg></span><div><b>Quer trabalhar com a gente?</b><small>Seja motorista parceiro e receba chamados pelo app.</small></div></div>
+      <a id="btn-trabalhe" class="btn" target="_blank" rel="noopener">Falar com o administrador</a></div>
   </main>
 </section>
 
@@ -114,6 +115,6 @@
 <div id="instalar" class="instalar hidden"><span>Instale o LZ EXPRESS no celular</span><button id="btn-instalar">Instalar</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=7"></script>
+<script type="module" src="app.js?v=9"></script>
 </body>
 </html>

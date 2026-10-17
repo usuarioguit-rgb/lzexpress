@@ -93,3 +93,47 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .chat-rapidas button{border:2px solid var(--azul);background:#fff;color:var(--azul);border-radius:20px;padding:8px 14px;font-weight:700;white-space:nowrap}
 .chat-envio{display:flex;gap:8px;padding:10px 12px 16px}
 .chat-envio button{border:0;background:var(--ouro);color:var(--azul);font-weight:800;border-radius:12px;padding:0 18px;font-size:17px}
+
+/* ===== Novo visual: passageiro e login ===== */
+#cliente,#auth,#auth.com-logo{background:radial-gradient(120% 50% at 85% 0%,#1d3a6e 0%,#0a1b3a 45%,#050e22 100%);color:#f5f7fb;font-family:'DM Sans',system-ui,sans-serif}
+#cliente h2{font-family:'Sora',sans-serif;font-weight:800;font-size:32px;line-height:1.15;color:#f5f7fb;margin:0 0 6px}
+#cliente .sub{color:#a9b9d6;margin:0 0 18px}
+.selo{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:#bfe9d2;background:rgba(60,200,130,.14);border-radius:999px;padding:6px 12px;margin-bottom:12px}
+.selo i{width:8px;height:8px;border-radius:50%;background:#3cc882;display:block}
+#bloco-chamar label{color:#d6e0f2;font-size:14px;margin:0 0 8px}
+.campo{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:0 16px;height:54px;margin-bottom:14px}
+.campo:focus-within{border-color:#f2c25b}
+.campo svg{flex:none}
+.campo input,.campo input:focus{flex:1;background:transparent;border:0;outline:0;padding:0;margin:0;color:#f5f7fb;font-size:16px;font-family:inherit}
+.campo input::placeholder{color:#8ea2c6}
+#cliente .chamar{position:relative;overflow:hidden;height:150px;padding:0 20px;border-radius:28px;background:linear-gradient(135deg,#f8da83 0%,#f0a82d 55%,#e8821a 100%);box-shadow:0 18px 40px rgba(238,138,28,.38);color:#0a1b3a;gap:8px;justify-content:center}
+#cliente .chamar::before{content:"";position:absolute;right:-50px;top:-60px;width:190px;height:190px;border-radius:50%;border:26px solid rgba(255,255,255,.16)}
+#cliente .chamar::after{content:"";position:absolute;left:-40px;bottom:-70px;width:150px;height:150px;border-radius:50%;border:20px solid rgba(10,27,58,.08)}
+.chamar .t{position:relative;font-family:'Sora',sans-serif;font-weight:800;font-size:26px;letter-spacing:.5px}
+.chamar .s{position:relative;font-size:14px;font-weight:500;color:rgba(10,27,58,.78)}
+#cliente .aviso{background:rgba(220,70,60,.15);color:#ffb4ab;border:1px solid rgba(255,120,110,.4)}
+#cliente .status{background:rgba(255,255,255,.07);border-color:#f2c25b;box-shadow:none}
+#cliente .status.aceito{border-color:#3cc882}#cliente .status.final{border-color:#8ea2c6}
+#status-titulo{color:#f5f7fb}#status-texto{color:#b4c3df}
+#cliente .btn.secundario{background:transparent;color:#ff9a90;border-color:#ff9a90}
+#cliente .btn.principal,#btn-trabalhe{background:linear-gradient(135deg,#f8da83,#e8821a);color:#0a1b3a}
+.dica.info{display:flex;gap:12px;align-items:flex-start;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#b4c3df;margin-top:14px;padding:14px 16px;border-radius:16px}
+.dica.info svg{flex:none;margin-top:1px}.dica.info p{margin:0;font-size:14px;line-height:1.45}.dica.info b{color:#f5f7fb}
+#cliente .btn.neutro{display:flex;align-items:center;justify-content:center;gap:10px;height:52px;padding:0;border-radius:16px;background:transparent;color:#f2c25b;border:1.5px solid rgba(242,194,91,.6);font-size:16px;margin-top:14px}
+#cliente .trabalhe{margin-top:14px;background:linear-gradient(135deg,rgba(242,194,91,.16),rgba(242,194,91,.05));border:1px solid rgba(242,194,91,.28);border-radius:20px;padding:16px}
+.tr-topo{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.tr-ico{flex:none;width:40px;height:40px;border-radius:50%;background:#f2c25b;display:flex;align-items:center;justify-content:center}
+.tr-topo b{display:block;font-family:'Sora',sans-serif;font-size:16px;color:#f5f7fb}
+.tr-topo small{display:block;font-size:13px;color:#b4c3df;margin-top:2px}
+#btn-trabalhe{height:46px;line-height:46px;padding:0;margin:0;border-radius:14px;font-size:15px;background:#f5f7fb}
+#auth .topo .sub{color:#a9b9d6}
+#auth .card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);box-shadow:none}
+#auth .abas{background:rgba(255,255,255,.07)}#auth .aba{color:#a9b9d6}
+#auth .aba.ativa{background:linear-gradient(135deg,#f8da83,#e8821a);color:#0a1b3a}
+#auth label{color:#d6e0f2}
+#auth input{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);color:#f5f7fb}
+#auth input::placeholder{color:#8ea2c6}#auth input:focus{border-color:#f2c25b}
+#auth .olho{background:rgba(255,255,255,.12);color:#f2c25b}
+#auth .erro{color:#ff9a90}
+#auth .btn.principal{background:linear-gradient(135deg,#f8da83,#e8821a);color:#0a1b3a}
+#auth .link{color:#f2c25b}

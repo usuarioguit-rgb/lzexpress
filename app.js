@@ -36,6 +36,7 @@ function erroMsg(e){
     "auth/missing-password":"Digite sua senha.",
     "auth/weak-password":"A senha precisa ter pelo menos 6 caracteres.",
     "auth/email-already-in-use":"Este e-mail já tem cadastro. Toque em “Entrar”.",
+    "app/senha-diferente":"Este e-mail já tem conta, mas a senha não confere. Toque em “Entrar” com a senha antiga ou em “Esqueci minha senha”.",
     "auth/invalid-credential":"E-mail ou senha incorretos.",
     "auth/user-not-found":"E-mail ou senha incorretos.",
     "auth/wrong-password":"E-mail ou senha incorretos.",
@@ -72,8 +73,16 @@ $("btn-auth").onclick = async () => {
   try {
     if (modoCadastro) {
       cadastrando = { nome, telefone, email };
-      const c = await createUserWithEmailAndPassword(auth, email, senha);
-      await setDoc(doc(db, "users", c.user.uid), { nome, telefone, email, criadoEm: serverTimestamp() });
+      try {
+        const c = await createUserWithEmailAndPassword(auth, email, senha);
+        await setDoc(doc(db, "users", c.user.uid), { nome, telefone, email, criadoEm: serverTimestamp() });
+      } catch (e) {
+        if (e.code !== "auth/email-already-in-use") throw e;
+        let c;
+        try { c = await signInWithEmailAndPassword(auth, email, senha); }
+        catch { cadastrando = null; throw Object.assign(new Error("senha"), { code: "app/senha-diferente" }); }
+        await setDoc(doc(db, "users", c.user.uid), { nome, telefone, email, criadoEm: serverTimestamp() });
+      }
     } else {
       await signInWithEmailAndPassword(auth, email, senha);
     }
@@ -147,6 +156,7 @@ function iniciarCliente(user){
   let ativo = null, online = null;
   const atualizarBotao = () => {
     $("bloco-chamar").classList.toggle("hidden", !!ativo || online !== true);
+    $("selo-online").classList.toggle("hidden", online !== true);
     $("aviso-offline").classList.toggle("hidden", !!ativo || online !== false);
   };
   unsubs.push(onSnapshot(collection(db,"disponibilidade"),
@@ -179,7 +189,16 @@ function iniciarCliente(user){
     navigator.geolocation.getCurrentPosition(async pos => {
       try {
         const s = await getDoc(doc(db,"users",user.uid));
-        const u = s.exists() ? s.data() : { nome: user.email.split("@")[0].replace(/[._-]+/g," ").replace(/\b\w/g, l => l.toUpperCase()), telefone: "" };
+        let u;
+        if (s.exists()) u = s.data();
+        else {
+          const nome = (prompt("Digite seu nome:") || "").trim();
+          const telefone = (prompt("Digite seu telefone (WhatsApp):") || "").trim();
+          if (!nome || !telefone) { btn.disabled = false; return; }
+          u = { nome, telefone, email: user.email };
+          await setDoc(doc(db,"users",user.uid), { ...u, criadoEm: serverTimestamp() });
+          $("ola").textContent = "Olá, " + nome.split(" ")[0] + "!";
+        }
         const ch = doc(collection(db,"chamados")), lote = writeBatch(db);
         lote.set(ch, {
           uid:user.uid, nome:u.nome, referencia:$("referencia").value.trim().slice(0,120),
@@ -355,7 +374,7 @@ function iniciarPainel(user, admin, perfil){
   $("busca-cliente").oninput = mostrarClientes;
   $("lista-clientes").onclick = e => {
     const b = e.target.closest("[data-del]"); if (!b) return;
-    if (!confirm("Apagar " + b.dataset.nome + " dos contatos?")) return;
+    if (!confirm("Apagar " + b.dataset.nome + " dos contatos? O login dela continua existindo; no próximo chamado o app pedirá nome e telefone de novo.")) return;
     deleteDoc(doc(db,"users",b.dataset.del)).catch(() => alert("Não foi possível apagar. Tente de novo."));
   };
   unsubs.push(onSnapshot(collection(db,"users"), snap => {
