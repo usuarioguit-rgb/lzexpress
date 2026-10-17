@@ -132,7 +132,7 @@ const MOTIVOS_CLIENTE = {
   desistiu:"Chamado encerrado a pedido do cliente."
 };
 function textoStatus(c){
-  if (c.status === "aguardando" && c.aviso === "aguardar") return ["Aguarde um pouquinho","O moto táxi está terminando outra corrida. Pode aguardar, já vamos até você!",""];
+  if (c.status === "aguardando" && c.aviso === "aguardar") return ["Aguarde um pouquinho","Os moto táxis estão ocupados no momento. Aguarde um pouco, assim que um aceitar você será atendido!",""];
   if (c.status === "aceito") return ["Moto a caminho! 🏍️", (c.motoristaNome || MOTORISTA_NOME) + " aceitou seu chamado e está indo até você. Fique no local.","aceito"];
   if (c.status === "cancelado" && MOTIVOS_CLIENTE[c.motivo]) return ["Chamado cancelado", MOTIVOS_CLIENTE[c.motivo], "final"];
   return TEXTOS[c.status] || TEXTOS.aguardando;
@@ -262,7 +262,7 @@ function iniciarPainel(user, admin, perfil){
     pixNome: admin ? "Leandro Vanzeler Vasconcelos · Mercado Pago" : perfil.nome };
   ["aba-clientes","aba-motoristas","btn-apagar"].forEach(i => $(i).classList.toggle("hidden", !admin));
   abaMot("ativos");
-  let online = false, histL = [];
+  let online = false, histL = [], ocupado = false;
   const primeira = {}, fontes = {};
   const btn = $("btn-online");
   const atualizarApagar = () => {
@@ -274,7 +274,8 @@ function iniciarPainel(user, admin, perfil){
   const render = () => {
     const itens = [...new Map(Object.values(fontes).flat().map(c => [c.id, c])).values()];
     const abertos = c => ["aguardando","aceito"].includes(c.status);
-    const ativos = itens.filter(abertos).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
+    ocupado = itens.some(c => c.status === "aceito" && c.motoristaId === EU.uid);
+    const ativos = itens.filter(c => (c.status === "aguardando" && (admin || !ocupado)) || (c.status === "aceito" && c.motoristaId === EU.uid)).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
     const hist = itens.filter(c => !abertos(c)).sort((a,b) => seg(b)-seg(a));
     histL = hist; atualizarApagar();
     $("lista").innerHTML = ativos.length ? ativos.map(c => {
@@ -288,8 +289,8 @@ function iniciarPainel(user, admin, perfil){
           <a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">📍 Google Maps</a>
           <a class="b-waze" target="_blank" href="https://waze.com/ul?ll=${c.lat},${c.lng}&navigate=yes">🚗 Waze</a>
           ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">💬 WhatsApp</a>` : ""}
-          ${esp ? `<button class="b-ok" data-a="aceito" data-id="${c.id}">✔ Aceitar</button>` : (meu ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">🏁 Finalizar</button>` : "")}
-          <button class="b-cancel" data-a="cancelar" data-id="${c.id}" style="grid-column:1/3">✖ Cancelar chamado</button>
+          ${esp ? (ocupado ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">✔ Aceitar</button>`) : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">🏁 Finalizar</button>`}
+          ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"⏳ Cliente avisado para aguardar":"⏳ Pedir para aguardar"}</button>` : ""}
         </div></div>`;
     }).join("") : `<p class="vazio">Nenhum chamado por enquanto.</p>`;
     const hoje = new Date().toDateString();
@@ -303,7 +304,7 @@ function iniciarPainel(user, admin, perfil){
     }).join("") : `<p class="vazio">Nenhuma corrida no histórico ainda.</p>`;
   };
   const ouvir = (chave, q) => unsubs.push(onSnapshot(q, snap => {
-    if (primeira[chave] && snap.docChanges().some(c => c.type === "added" && c.doc.data().status === "aguardando")) beep();
+    if (primeira[chave] && snap.docChanges().some(c => c.type === "added" && c.doc.data().status === "aguardando") && (admin || !ocupado)) beep();
     primeira[chave] = true;
     fontes[chave] = snap.docs.map(d => ({id:d.id, ...d.data()}));
     render();
@@ -409,19 +410,13 @@ function iniciarPainel(user, admin, perfil){
   };
 }
 
-let cancelId = null;
 $("lista").addEventListener("click", e => {
   const b = e.target.closest("button[data-id]"); if (!b) return;
   const a = b.dataset.a;
-  if (a === "cancelar") { cancelId = b.dataset.id; $("cancel-tela").classList.remove("hidden"); return; }
+  if (a === "aguardar") { updateDoc(doc(db,"chamados",b.dataset.id), { aviso:"aguardar" }).catch(() => alert("Não foi possível avisar.")); return; }
   if (a === "aceito") { aceitar(b.dataset.id); return; }
   updateDoc(doc(db,"chamados",b.dataset.id), { status:"finalizado", finalizadoEm:serverTimestamp() }).catch(() => alert("Não foi possível finalizar."));
   abaMot("hist");
-});
-$("cancel-tela").addEventListener("click", e => {
-  const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.motivo && cancelId) updateDoc(doc(db,"chamados",cancelId), { status:"cancelado", motivo:b.dataset.motivo, finalizadoEm:serverTimestamp() }).catch(() => alert("Não foi possível cancelar."));
-  cancelId = null; $("cancel-tela").classList.add("hidden");
 });
 $("lista-hist").addEventListener("click", e => { if (e.target.closest("[data-pix]") && EU) abrirPix(EU.pixNome, EU.pix); });
 $("pix-fechar").onclick = () => $("pix-tela").classList.add("hidden");

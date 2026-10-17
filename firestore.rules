@@ -41,10 +41,10 @@ service cloud.firestore {
         || (ehMotorista() && (resource.data.status == "aguardando" || resource.data.motoristaId == request.auth.uid)));
       allow update: if request.auth != null && (admin()
         || (ehMotorista() && resource.data.status == "aguardando"
-            && request.resource.data.status in ["aceito", "cancelado"]
-            && (request.resource.data.status != "aceito" || request.resource.data.motoristaId == request.auth.uid))
+            && request.resource.data.status == "aceito"
+            && request.resource.data.motoristaId == request.auth.uid)
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid
-            && request.resource.data.status in ["finalizado", "cancelado"])
+            && request.resource.data.status == "finalizado")
         || (resource.data.uid == request.auth.uid && request.resource.data.status == "cancelado"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])));
       allow delete: if admin() && resource.data.status in ["finalizado", "cancelado"];
