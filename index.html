@@ -9,7 +9,7 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -50,10 +50,14 @@
     </div>
     <div id="status" class="status hidden">
       <div id="status-titulo"></div><p id="status-texto"></p>
-      <a id="btn-zap-mot" class="btn principal hidden" target="_blank" rel="noopener">Falar com o motorista</a>
+      <button id="btn-chat-cli" class="btn principal hidden" type="button">💬 Conversar com o motorista</button>
       <button id="btn-cancelar" class="btn secundario hidden" type="button">Cancelar chamado</button>
     </div>
     <p class="dica">Ao chamar, o aplicativo vai pedir para usar sua localização. Toque em <b>“Permitir”</b> para o moto táxi chegar até você.</p>
+    <button class="btn neutro" data-share type="button">📲 Compartilhar o app</button>
+    <div id="bloco-trabalhe" class="trabalhe hidden"><b>Quer trabalhar com a gente?</b>
+      <p>Seja motorista parceiro do LZ EXPRESS e receba chamados pelo app.</p>
+      <a id="btn-trabalhe" class="btn neutro" target="_blank" rel="noopener">💬 Falar com o administrador</a></div>
   </main>
 </section>
 
@@ -62,6 +66,7 @@
   <header class="barra"><div class="logo pequeno">LZ<span>EXPRESS</span> · Painel</div><button class="sair" data-sair>Sair</button></header>
   <main class="corpo">
     <button id="btn-online" class="toggle off" type="button">Carregando...</button>
+    <button class="btn neutro mini" data-share type="button">📲 Compartilhar o app</button>
     <div class="abas"><button id="aba-ativos" class="aba ativa" type="button">Chamados</button><button id="aba-hist" class="aba" type="button">Histórico</button><button id="aba-clientes" class="aba hidden" type="button">Clientes</button><button id="aba-motoristas" class="aba hidden" type="button">Motoristas</button></div>
     <div id="lista"></div>
     <div id="motoristas" class="hidden">
@@ -82,6 +87,22 @@
   </main>
 </section>
 
+<div id="share-tela" class="pix hidden"><div class="pix-card">
+  <h2>Compartilhar o app</h2><p class="sub">Peça para a pessoa abrir a câmera do celular e apontar para o QR Code.</p>
+  <div id="share-qr" class="pix-qr"></div>
+  <p class="dica">Android: toque em “Instalar”. iPhone: abra no Safari e use Compartilhar › Adicionar à Tela de Início.</p>
+  <button id="share-nativo" class="btn principal" type="button">Enviar o link</button>
+  <button id="share-copiar" class="btn neutro" type="button">Copiar link</button>
+  <button id="share-fechar" class="btn neutro" type="button">Fechar</button>
+</div></div>
+
+<div id="chat-tela" class="chat hidden"><div class="chat-card">
+  <div class="chat-topo"><b id="chat-titulo">Conversa</b><button id="chat-fechar" type="button">Fechar</button></div>
+  <div id="chat-msgs" class="chat-msgs"></div>
+  <div id="chat-rapidas" class="chat-rapidas"></div>
+  <div class="chat-envio"><input id="chat-input" maxlength="300" placeholder="Escreva uma mensagem"><button id="chat-enviar" type="button">Enviar</button></div>
+</div></div>
+
 <div id="pix-tela" class="pix hidden"><div class="pix-card">
   <h2>Pagar com Pix</h2><p class="sub">Abra o app do seu banco e leia o QR Code</p>
   <div id="pix-qr" class="pix-qr"></div>
@@ -93,6 +114,6 @@
 <div id="instalar" class="instalar hidden"><span>Instale o LZ EXPRESS no celular</span><button id="btn-instalar">Instalar</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=5"></script>
+<script type="module" src="app.js?v=6"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteDoc, runTransaction, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteDoc, runTransaction, increment, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { PIX_PAYLOAD } from "./pix.js";
 import { MOTORISTA_NOME, MOTORISTA_ZAP } from "./motorista.js";
 import * as cfg from "./config.js";
@@ -27,7 +27,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 
 let EU = null; const fones = {};
 let modoCadastro = false, unsubs = [], audioCtx = null;
-const parar = () => { unsubs.forEach(f => f()); unsubs = []; };
+const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); };
 
 function tela(id){ ["loading","auth","cliente","motorista"].forEach(t => $(t).classList.toggle("hidden", t !== id)); }
 function erroMsg(e){
@@ -118,7 +118,7 @@ onAuthStateChanged(auth, async user => {
 /* ---------- Cliente ---------- */
 const TEXTOS = {
   aguardando:["Procurando o moto táxi...","Seu chamado foi enviado. Aguarde um instante.",""],
-  aceito:["Moto a caminho! 🏍️","O moto táxi aceitou e está indo até você. Fique no local.","aceito"],
+  aceito:["Moto a caminho! 🏍️","O moto táxi aceitou e está indo até você. Fique no local e use o botão abaixo para conversar.","aceito"],
   finalizado:["Corrida finalizada","Obrigado por usar o LZ EXPRESS!","final"],
   cancelado:["Chamado cancelado","Você pode chamar novamente quando quiser.","final"]
 };
@@ -154,13 +154,16 @@ function iniciarCliente(user){
     ativo = ult && ["aguardando","aceito"].includes(ult.status) ? ult : null;
     atualizarBotao();
     $("btn-cancelar").classList.toggle("hidden", !(ativo && ativo.status === "aguardando"));
+    const aceito = ult && ult.status === "aceito" ? ult : null;
+    monitorarChat(aceito ? aceito.id : null);
     if (!ult) { $("status").classList.add("hidden"); return; }
     const t = textoStatus(ult);
     $("status").className = "status " + t[2];
     $("status-titulo").textContent = t[0]; $("status-texto").textContent = t[1];
-    const zap = String(ult.motoristaZap || (ult.motoristaId ? "" : MOTORISTA_ZAP) || "").replace(/\D/g,"");
-    $("btn-zap-mot").classList.toggle("hidden", !(ult.status === "aceito" && zap));
-    $("btn-zap-mot").href = "https://wa.me/" + zap;
+    aoMudarChat = () => { const n = naoLidas(); $("btn-chat-cli").textContent = "💬 Conversar com o motorista" + (n ? ` (${n} nova${n > 1 ? "s" : ""})` : ""); };
+    aoMudarChat();
+    $("btn-chat-cli").classList.toggle("hidden", !aceito);
+    $("btn-chat-cli").onclick = () => aceito && abrirChat(aceito.id, aceito.motoristaNome || "o motorista");
   }, () => alert("Não foi possível carregar. Verifique a internet.")));
 
   $("btn-cancelar").onclick = () => ativo && updateDoc(doc(db,"chamados",ativo.id), { status:"cancelado" });
@@ -247,7 +250,7 @@ async function aceitar(id){
     await runTransaction(db, async t => {
       const ref = doc(db,"chamados",id), s = await t.get(ref);
       if (!s.exists() || s.data().status !== "aguardando") throw new Error("ja");
-      t.update(ref, { status:"aceito", motoristaId:EU.uid, motoristaNome:EU.nome, motoristaZap:EU.zap, aceitoEm:serverTimestamp(), aviso:"" });
+      t.update(ref, { status:"aceito", motoristaId:EU.uid, motoristaNome:EU.nome, aceitoEm:serverTimestamp(), aviso:"" });
       t.set(doc(db,"contagem",EU.uid), { total:increment(1), dias:{ [new Date().toLocaleDateString("sv-SE")]:increment(1) } }, { merge:true });
     });
   } catch (e) { alert(e.message === "ja" ? "Este chamado já foi aceito por outro motorista." : "Não foi possível aceitar. Tente de novo."); }
@@ -275,21 +278,23 @@ function iniciarPainel(user, admin, perfil){
     const itens = [...new Map(Object.values(fontes).flat().map(c => [c.id, c])).values()];
     const abertos = c => ["aguardando","aceito"].includes(c.status);
     ocupado = itens.some(c => c.status === "aceito" && c.motoristaId === EU.uid);
+    const meuAtivo = itens.find(c => c.status === "aceito" && c.motoristaId === EU.uid);
+    aoMudarChat = render; monitorarChat(meuAtivo ? meuAtivo.id : null);
     const ativos = itens.filter(c => (c.status === "aguardando" && (admin || !ocupado)) || (c.status === "aceito" && c.motoristaId === EU.uid)).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
     const hist = itens.filter(c => !abertos(c)).sort((a,b) => seg(b)-seg(a));
     histL = hist; atualizarApagar();
     $("lista").innerHTML = ativos.length ? ativos.map(c => {
-      const meu = c.motoristaId === EU.uid, esp = c.status === "aguardando", ve = admin || meu;
+      const meu = c.motoristaId === EU.uid, esp = c.status === "aguardando", ve = admin;
       if (ve && !(c.id in fones)) carregarFone(c, render);
       const fone = ve ? fones[c.id] : null, zap = String(fone || "").replace(/\D/g,"");
       return `<div class="chamado ${esp?"":"aceito"}"><h3>${esc(c.nome)}</h3>
-        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} · precisão ~${c.precisao ?? "?"} m<br>${esp ? "" : "Atendendo: " + esc(c.motoristaNome || "?") + "<br>"}${ve ? (fone ? esc(fone) : (fone === null ? "carregando telefone..." : "")) : "📵 Telefone liberado após aceitar"}</div>
+        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} · precisão ~${c.precisao ?? "?"} m<br>${esp ? "" : "Atendendo: " + esc(c.motoristaNome || "?") + "<br>"}${ve ? (fone ? esc(fone) : (fone === null ? "carregando telefone..." : "")) : (esp ? "🔒 Contato pelo chat do app após aceitar" : "")}</div>
         ${c.referencia ? `<div class="ref">📌 Referência: ${esc(c.referencia)}</div>` : ""}
         <div class="acoes">
           <a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">📍 Google Maps</a>
-          <a class="b-waze" target="_blank" href="https://waze.com/ul?ll=${c.lat},${c.lng}&navigate=yes">🚗 Waze</a>
-          ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">💬 WhatsApp</a>` : ""}
+                    ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">💬 WhatsApp</a>` : ""}
           ${esp ? (ocupado ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">✔ Aceitar</button>`) : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">🏁 Finalizar</button>`}
+          ${!esp && meu ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">💬 Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"⏳ Cliente avisado para aguardar":"⏳ Pedir para aguardar"}</button>` : ""}
         </div></div>`;
     }).join("") : `<p class="vazio">Nenhum chamado por enquanto.</p>`;
@@ -330,9 +335,14 @@ function iniciarPainel(user, admin, perfil){
     if (online || !histL.length) return;
     if (!confirm("Apagar " + histL.length + " corridas do histórico? Isso não pode ser desfeito.")) return;
     try {
-      const lote = writeBatch(db);
-      histL.forEach(c => { lote.delete(doc(db,"chamados",c.id)); lote.delete(doc(db,"contatos",c.id)); });
-      await lote.commit();
+      const refs = [];
+      for (const c of histL) {
+        refs.push(doc(db,"chamados",c.id), doc(db,"contatos",c.id));
+        (await getDocs(collection(db,"chamados",c.id,"mensagens"))).forEach(d => refs.push(d.ref));
+      }
+      for (let k = 0; k < refs.length; k += 400) {
+        const lote = writeBatch(db); refs.slice(k, k+400).forEach(r => lote.delete(r)); await lote.commit();
+      }
     } catch { alert("Não foi possível apagar. Tente de novo."); }
   };
   let clientes = [];
@@ -411,6 +421,7 @@ function iniciarPainel(user, admin, perfil){
 }
 
 $("lista").addEventListener("click", e => {
+  const ch = e.target.closest("[data-chat]"); if (ch) { abrirChat(ch.dataset.chat, ch.dataset.nome); return; }
   const b = e.target.closest("button[data-id]"); if (!b) return;
   const a = b.dataset.a;
   if (a === "aguardar") { updateDoc(doc(db,"chamados",b.dataset.id), { aviso:"aguardar" }).catch(() => alert("Não foi possível avisar.")); return; }
@@ -426,6 +437,64 @@ $("pix-copiar").onclick = async () => {
   setTimeout(() => $("pix-copiar").textContent = "Copiar código Pix", 2000);
 };
 document.addEventListener("click", () => { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); }, { once:true });
+
+/* ---------- Chat da corrida ---------- */
+let chatId = null, chatMsgs = [], chatUnsub = null, chatAberto = false, lidas = new Set(), chatPrimeira = true, aoMudarChat = () => {};
+const naoLidas = () => chatMsgs.filter(m => m.de !== auth.currentUser?.uid && !lidas.has(m.id)).length;
+function monitorarChat(id){
+  if (id === chatId) return;
+  if (chatUnsub) { chatUnsub(); chatUnsub = null; }
+  chatId = id; chatMsgs = []; lidas = new Set(); chatPrimeira = true;
+  if (!id) { chatAberto = false; $("chat-tela").classList.add("hidden"); aoMudarChat(); return; }
+  chatUnsub = onSnapshot(query(collection(db,"chamados",id,"mensagens"), orderBy("criadoEm")), snap => {
+    const novo = !chatPrimeira && snap.docChanges().some(c => c.type === "added" && c.doc.data().de !== auth.currentUser?.uid);
+    chatPrimeira = false;
+    chatMsgs = snap.docs.map(d => ({id:d.id, ...d.data()}));
+    if (chatAberto) chatMsgs.forEach(m => lidas.add(m.id));
+    if (novo) beep();
+    desenharChat(); aoMudarChat();
+  }, () => {});
+}
+function desenharChat(){
+  const eu = auth.currentUser?.uid, box = $("chat-msgs");
+  box.innerHTML = chatMsgs.length ? chatMsgs.map(m => `<div class="msg ${m.de === eu ? "eu" : "outro"}">${esc(m.texto)}<small>${m.criadoEm ? fmt(m.criadoEm,true) : ""}</small></div>`).join("")
+    : `<p class="vazio">Nenhuma mensagem ainda. Use os atalhos abaixo.</p>`;
+  box.scrollTop = box.scrollHeight;
+}
+function abrirChat(id, nome){
+  if (chatId !== id) monitorarChat(id);
+  chatAberto = true; chatMsgs.forEach(m => lidas.add(m.id));
+  $("chat-titulo").textContent = "Conversa com " + nome;
+  $("chat-rapidas").innerHTML = (EU ? ["Estou a caminho","Cheguei","Onde você está?"] : ["Estou aqui","Estou na frente","Pode vir"]).map(t => `<button type="button">${t}</button>`).join("");
+  $("chat-tela").classList.remove("hidden"); desenharChat(); aoMudarChat();
+}
+async function enviarMsg(texto){
+  texto = texto.trim(); if (!texto || !chatId) return;
+  try { await addDoc(collection(db,"chamados",chatId,"mensagens"), { de:auth.currentUser.uid, texto:texto.slice(0,300), criadoEm:serverTimestamp() }); }
+  catch { alert("Não foi possível enviar. A corrida pode ter terminado."); }
+}
+$("chat-enviar").onclick = () => { const i = $("chat-input"); enviarMsg(i.value); i.value = ""; };
+$("chat-input").addEventListener("keydown", e => { if (e.key === "Enter") $("chat-enviar").click(); });
+$("chat-rapidas").onclick = e => { const b = e.target.closest("button"); if (b) enviarMsg(b.textContent); };
+$("chat-fechar").onclick = () => { chatAberto = false; $("chat-tela").classList.add("hidden"); };
+
+/* ---------- Compartilhar o app e trabalhe conosco ---------- */
+const LINK_APP = location.origin + location.pathname;
+let qrApp = false;
+document.querySelectorAll("[data-share]").forEach(b => b.onclick = () => {
+  if (!qrApp && window.QRCode) { new QRCode($("share-qr"), { text: LINK_APP, width:240, height:240, correctLevel: QRCode.CorrectLevel.M }); qrApp = true; }
+  $("share-tela").classList.remove("hidden");
+});
+$("share-fechar").onclick = () => $("share-tela").classList.add("hidden");
+const copiarLink = async () => { try { await navigator.clipboard.writeText(LINK_APP); $("share-copiar").textContent = "Link copiado!"; } catch { prompt("Copie o link:", LINK_APP); } setTimeout(() => $("share-copiar").textContent = "Copiar link", 2000); };
+$("share-copiar").onclick = copiarLink;
+if (!navigator.share) $("share-nativo").classList.add("hidden");
+$("share-nativo").onclick = () => navigator.share({ title:"LZ EXPRESS", text:"Peça seu moto táxi pelo LZ EXPRESS:", url:LINK_APP }).catch(() => {});
+const zapAdm = String(MOTORISTA_ZAP || "").replace(/\D/g,"");
+if (zapAdm) {
+  $("bloco-trabalhe").classList.remove("hidden");
+  $("btn-trabalhe").href = "https://wa.me/" + (zapAdm.length > 11 ? zapAdm : "55" + zapAdm) + "?text=" + encodeURIComponent("Olá! Quero trabalhar como motorista no LZ EXPRESS.");
+}
 
 /* ---------- PWA ---------- */
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");

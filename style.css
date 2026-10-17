@@ -75,3 +75,21 @@ a.btn{display:block;text-align:center;text-decoration:none}
 #motorista .aba{font-size:13px;padding:12px 2px}
 #motoristas .card{margin:0 0 18px;padding:16px}
 #motoristas h3{color:var(--azul);margin-bottom:4px}
+.btn.neutro{background:#fff;color:var(--azul);border:2px solid var(--azul)}
+.btn.mini{padding:12px;font-size:16px;margin:0 0 14px}
+.trabalhe{margin-top:20px;background:#fff;border-radius:16px;padding:16px;border-left:8px solid var(--ouro)}
+.trabalhe p{margin:6px 0 12px;color:#4a5265;font-size:16px}
+.b-chat{background:#7a4fb5}
+.chat{position:fixed;inset:0;background:rgba(11,31,58,.92);z-index:60;display:flex;align-items:flex-end;justify-content:center}
+.chat-card{background:var(--fundo);width:100%;max-width:480px;height:92vh;display:flex;flex-direction:column;border-radius:20px 20px 0 0;overflow:hidden}
+.chat-topo{background:var(--azul);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+.chat-topo button{background:none;border:2px solid var(--ouro);color:var(--ouro2);border-radius:10px;padding:6px 14px;font-weight:700}
+.chat-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:80%;padding:10px 12px;border-radius:14px;font-size:17px;word-wrap:break-word}
+.msg small{display:block;font-size:11px;opacity:.6;margin-top:2px}
+.msg.eu{align-self:flex-end;background:var(--azul);color:#fff;border-bottom-right-radius:4px}
+.msg.outro{align-self:flex-start;background:#fff;border-bottom-left-radius:4px}
+.chat-rapidas{display:flex;gap:8px;padding:8px 12px;overflow-x:auto}
+.chat-rapidas button{border:2px solid var(--azul);background:#fff;color:var(--azul);border-radius:20px;padding:8px 14px;font-weight:700;white-space:nowrap}
+.chat-envio{display:flex;gap:8px;padding:10px 12px 16px}
+.chat-envio button{border:0;background:var(--ouro);color:var(--azul);font-weight:800;border-radius:12px;padding:0 18px;font-size:17px}
