@@ -197,3 +197,24 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .marca .mn{font-family:'Sora',sans-serif;font-weight:800;font-size:21px;line-height:1;color:#f5f7fb}
 .marca .mn b{font-weight:800;background:linear-gradient(135deg,#fbe08f,#f0a82d 55%,#e8821a);-webkit-background-clip:text;background-clip:text;color:transparent}
 .marca small{display:block;font-family:'DM Sans',sans-serif;font-weight:700;font-size:9px;letter-spacing:4px;color:#f2c25b;margin-top:3px}
+
+/* ===== Tela de carregamento ===== */
+#loading{position:relative;overflow:hidden;background:#091a37;padding-bottom:90px;font-family:'DM Sans',system-ui,sans-serif;color:#f5f7fb}
+.ld-mapa{position:absolute;inset:0;width:100%;height:100%}
+.ld-sombra{position:absolute;inset:0;background:radial-gradient(75% 40% at 50% 46%,rgba(4,11,28,.82),rgba(4,11,28,.25) 75%,rgba(4,11,28,0)),linear-gradient(180deg,rgba(4,11,28,.55) 0%,rgba(4,11,28,0) 22%,rgba(4,11,28,0) 70%,rgba(4,11,28,.8) 100%)}
+.ld-centro{position:relative;display:flex;flex-direction:column;align-items:center}
+.ld-pino{position:relative;width:120px;height:120px;display:flex;align-items:center;justify-content:center}
+.ld-pino svg{position:relative;filter:drop-shadow(0 10px 24px rgba(238,138,28,.55))}
+.ld-an{position:absolute;left:50%;top:50%;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;border:2px solid #f2c25b;animation:ld-pulso 2.4s ease-out infinite}
+.ld-nome{margin-top:34px;display:flex;align-items:baseline;gap:10px;transform:skewX(-8deg)}
+.ld-nome b{font-family:'Sora',sans-serif;font-weight:800;font-size:50px;line-height:1;background:linear-gradient(135deg,#fbe08f,#f0a82d 55%,#e8821a);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ld-nome span{font-family:'Sora',sans-serif;font-weight:800;font-size:34px;line-height:1;letter-spacing:1px;color:#f5f7fb}
+.ld-linha{margin-top:12px;height:3px;width:210px;border-radius:2px;background:linear-gradient(90deg,transparent,#f2c25b,#e8821a,transparent)}
+.ld-tag{margin-top:12px;font-weight:700;font-size:12px;letter-spacing:7px;color:#f2c25b}
+.ld-carregando{position:absolute;left:0;right:0;bottom:96px;text-align:center;font-size:17px;font-weight:700;letter-spacing:1px;color:#d6e0f2}
+.ld-d{font-style:normal;display:inline-block;animation:ld-pisca 1.4s infinite}
+.ld-rota{animation:ld-tracejado 1.6s linear infinite}
+@keyframes ld-pulso{0%{transform:scale(.55);opacity:.55}100%{transform:scale(2.3);opacity:0}}
+@keyframes ld-tracejado{to{stroke-dashoffset:-60}}
+@keyframes ld-pisca{0%,20%{opacity:.2}50%{opacity:1}100%{opacity:.2}}
+@media (prefers-reduced-motion:reduce){.ld-an,.ld-rota,.ld-d{animation:none}}
