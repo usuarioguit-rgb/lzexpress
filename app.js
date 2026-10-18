@@ -303,14 +303,14 @@ function iniciarPainel(user, admin, perfil){
       if (ve && !(c.id in fones)) carregarFone(c, render);
       const fone = ve ? fones[c.id] : null, zap = String(fone || "").replace(/\D/g,"");
       return `<div class="chamado ${esp?"":"aceito"}"><h3>${esc(c.nome)}</h3>
-        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} · precisão ~${c.precisao ?? "?"} m<br>${esp ? "" : "Atendendo: " + esc(c.motoristaNome || "?") + "<br>"}${ve ? (fone ? esc(fone) : (fone === null ? "carregando telefone..." : "")) : (esp ? "🔒 Contato pelo chat do app após aceitar" : "")}</div>
-        ${c.referencia ? `<div class="ref">📌 Referência: ${esc(c.referencia)}</div>` : ""}
+        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} · precisão ~${c.precisao ?? "?"} m<br>${esp ? "" : "Atendendo: " + esc(c.motoristaNome || "?") + "<br>"}${ve ? (fone ? esc(fone) : (fone === null ? "carregando telefone..." : "")) : (esp ? "Contato pelo chat do app após aceitar" : "")}</div>
+        ${c.referencia ? `<div class="ref">Referência: ${esc(c.referencia)}</div>` : ""}
         <div class="acoes">
-          <a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">📍 Google Maps</a>
-                    ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">💬 WhatsApp</a>` : ""}
-          ${esp ? (ocupado ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">✔ Aceitar</button>`) : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">🏁 Finalizar</button>`}
-          ${!esp && meu ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">💬 Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
-          ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"⏳ Cliente avisado para aguardar":"⏳ Pedir para aguardar"}</button>` : ""}
+          <a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Google Maps</a>
+                    ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
+          ${esp ? (ocupado ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>`}
+          ${!esp && meu ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
+          ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
         </div></div>`;
     }).join("") : `<p class="vazio">Nenhum chamado por enquanto.</p>`;
     const hoje = new Date().toDateString();
@@ -320,7 +320,7 @@ function iniciarPainel(user, admin, perfil){
       const meu = c.motoristaId === EU.uid || (admin && !c.motoristaId);
       return `<div class="chamado ${c.status==="finalizado"?"aceito":"fim"}"><h3>${esc(c.nome)}</h3>
         <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}${MOT_TXT[c.motivo] ? " ("+MOT_TXT[c.motivo]+")" : ""}${admin && c.motoristaNome ? "<br>Motorista: " + esc(c.motoristaNome) : ""}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}</div>
-        ${c.status==="finalizado" && meu ? `<div class="acoes"><button class="b-ok" data-pix="1" style="grid-column:1/3">💲 Receber por Pix</button></div>` : ""}</div>`;
+        ${c.status==="finalizado" && meu ? `<div class="acoes"><button class="b-ok" data-pix="1" style="grid-column:1/3">Receber por Pix</button></div>` : ""}</div>`;
     }).join("") : `<p class="vazio">Nenhuma corrida no histórico ainda.</p>`;
   };
   const ouvir = (chave, q) => unsubs.push(onSnapshot(q, snap => {
@@ -336,7 +336,7 @@ function iniciarPainel(user, admin, perfil){
   unsubs.push(onSnapshot(doc(db,"disponibilidade",user.uid), s => {
     online = s.exists() && s.data().online === true;
     btn.className = "toggle " + (online ? "on" : "off");
-    btn.textContent = online ? "🟢 ONLINE - toque para ficar offline" : "🔴 OFFLINE - toque para ficar online";
+    btn.innerHTML = '<i class="pt"></i>' + (online ? "ONLINE · toque para ficar offline" : "OFFLINE · toque para ficar online");
     atualizarApagar();
   }));
   btn.onclick = () => setDoc(doc(db,"disponibilidade",user.uid), { online:!online, atualizadoEm:serverTimestamp() }).catch(() => alert("Não foi possível mudar o status."));
@@ -346,6 +346,8 @@ function iniciarPainel(user, admin, perfil){
 
   $("aba-clientes").onclick = () => abaMot("clientes");
   $("aba-motoristas").onclick = () => abaMot("motoristas");
+  $("btn-mostrar-form").onclick = () => { const oculto = $("form-mot").classList.toggle("hidden"); $("btn-mostrar-form").classList.toggle("sel", !oculto); };
+  $("btn-mostrar-lista").onclick = () => { const oculto = $("lista-motoristas").classList.toggle("hidden"); $("btn-mostrar-lista").classList.toggle("sel", !oculto); };
   $("btn-apagar").onclick = async () => {
     if (online || !histL.length) return;
     if (!confirm("Apagar " + histL.length + " corridas do histórico? Isso não pode ser desfeito.")) return;
@@ -367,8 +369,8 @@ function iniciarPainel(user, admin, perfil){
     $("lista-clientes").innerHTML = lista.length ? lista.map(c => {
       const fone = (c.telefone||"").replace(/\D/g,"");
       return `<div class="chamado aceito"><h3>${esc(c.nome)}</h3><div class="info">${esc(c.telefone)}</div>
-        <div class="acoes"><a class="b-zap" target="_blank" href="https://wa.me/55${fone}">💬 WhatsApp</a>
-        <button class="b-cancel" data-del="${c.id}" data-nome="${esc(c.nome)}" type="button">🗑 Apagar</button></div></div>`;
+        <div class="acoes"><a class="b-zap" target="_blank" href="https://wa.me/55${fone}">WhatsApp</a>
+        <button class="b-cancel" data-del="${c.id}" data-nome="${esc(c.nome)}" type="button">Apagar</button></div></div>`;
     }).join("") : `<p class="vazio">Nenhum cliente encontrado.</p>`;
   };
   $("busca-cliente").oninput = mostrarClientes;
@@ -385,6 +387,7 @@ function iniciarPainel(user, admin, perfil){
 
   let mots = [], cont = {};
   const desenhar = () => {
+    $("btn-mostrar-lista").textContent = "Ver motoristas cadastrados (" + mots.length + ")";
     const mes = new Date().toLocaleDateString("sv-SE").slice(0,7), dia = new Date().toLocaleDateString("sv-SE");
     $("lista-motoristas").innerHTML = mots.length ? mots.map(m => {
       const c = cont[m.id] || {}, dias = c.dias || {};
