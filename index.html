@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 
@@ -75,12 +75,13 @@
     <div id="status" class="status hidden">
       <div id="status-titulo"></div><p id="status-texto"></p>
       <button id="btn-chat-cli" class="btn principal hidden" type="button">💬 Conversar com o motorista</button>
+      <button id="btn-loc-cli" class="btn neutro hidden" type="button">Ver onde está o motorista</button>
       <button id="btn-cancelar" class="btn secundario hidden" type="button">Cancelar chamado</button>
     </div>
     <div class="dica info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><p>Ao chamar, toque em <b>“Permitir”</b> quando o celular pedir sua localização, para o moto táxi chegar até você.</p></div>
     <button class="btn neutro" data-share type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4M8.6 13.3l6.8 4"/></svg>Compartilhar o app</button>
     <div id="bloco-trabalhe" class="trabalhe hidden"><div class="tr-topo"><span class="tr-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a1b3a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-5.4A8 8 0 1 1 21 12z"/></svg></span><div><b>Quer trabalhar com a gente?</b><small>Seja motorista parceiro e receba chamados pelo app.</small></div></div>
-      <a id="btn-trabalhe" class="btn" target="_blank" rel="noopener">Falar com o administrador</a></div>
+      <button id="btn-trabalhe" class="btn" type="button">Saiba mais</button></div>
   </main>
 </section>
 
@@ -89,11 +90,13 @@
   <header class="barra"><svg class="mapa" viewBox="0 0 390 84" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="390" height="84" fill="#0B1F3A"/><g stroke="#1b3763" stroke-width="1.3"><line x1="0" x2="390" y1="13" y2="13"/><line x1="0" x2="390" y1="38" y2="38"/><line x1="0" x2="390" y1="63" y2="63"/><line y1="0" y2="84" x1="40" x2="40"/><line y1="0" y2="84" x1="110" x2="110"/><line y1="0" y2="84" x1="190" x2="190"/><line y1="0" y2="84" x1="250" x2="250"/><line y1="0" y2="84" x1="320" x2="320"/><line y1="0" y2="84" x1="370" x2="370"/></g><g stroke="#27508a" stroke-width="3" fill="none" stroke-linecap="round"><line x1="0" y1="76" x2="200" y2="0"/><line x1="120" y1="84" x2="390" y2="10"/><path d="M0 57 C 90 67 140 19 230 34 S 350 57 390 23"/></g><path d="M20 67 C 110 71 150 29 240 44 S 340 55 372 25" stroke="#f2c25b" stroke-width="2.5" stroke-dasharray="6 5" fill="none" stroke-linecap="round"/><circle cx="372" cy="25" r="16" fill="#f2c25b" opacity=".16"/><g transform="translate(372 33)"><path d="M0 0c-6-7-9-11-9-15a9 9 0 1 1 18 0c0 4-3 8-9 15z" fill="#f2c25b"/><circle cy="-15" r="3.2" fill="#0B1F3A"/></g></svg><div class="marca"><svg width="34" height="40" viewBox="0 0 24 28" aria-hidden="true"><defs><linearGradient id="gp2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fbe08f"/><stop offset="1" stop-color="#e8821a"/></linearGradient></defs><path d="M12 27s9-8.2 9-15a9 9 0 1 0-18 0c0 6.8 9 15 9 15z" fill="url(#gp2)"/><circle cx="12" cy="12" r="3.6" fill="#0B1F3A"/></svg><div><div class="mn"><b>LZ</b> EXPRESS</div><small>MOTO TÁXI</small></div></div><button class="sair" data-sair>Sair</button></header>
   <main class="corpo">
     <button id="btn-online" class="toggle off" type="button">Carregando...</button>
+    <div id="plano-card" class="plano hidden"><div><b id="plano-tit"></b><small id="plano-sub"></small></div><button id="btn-pagar" type="button">Pagar mensalidade</button></div>
     <button class="btn neutro mini" data-share type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4M8.6 13.3l6.8 4"/></svg>Compartilhar o app</button>
     <div class="abas"><button id="aba-ativos" class="aba ativa" type="button">Chamados</button><button id="aba-hist" class="aba" type="button">Histórico</button><button id="aba-clientes" class="aba hidden" type="button">Clientes</button><button id="aba-motoristas" class="aba hidden" type="button">Motoristas</button></div>
     <div id="lista"></div>
     <div id="motoristas" class="hidden">
-      <div class="menu-mot"><button id="btn-mostrar-form" type="button">Cadastrar motorista</button><button id="btn-mostrar-lista" type="button">Ver motoristas cadastrados</button></div>
+      <div class="menu-mot"><button id="btn-mostrar-form" type="button">Cadastrar motorista</button><button id="btn-mostrar-lista" type="button">Ver motoristas cadastrados</button><button id="btn-mostrar-sol" type="button">Solicitações de motoristas</button></div>
+      <div id="plano-adm" class="resumo hidden"><span id="plano-adm-txt"></span> <button id="btn-plano-edit" type="button">Editar plano</button></div>
       <div id="form-mot" class="card hidden"><h3>Cadastrar motorista</h3>
         <label>Nome</label><input id="m-nome" placeholder="Nome do motoboy">
         <label>WhatsApp</label><input id="m-telefone" type="tel" placeholder="(91) 99999-9999">
@@ -103,6 +106,7 @@
         <p id="m-erro" class="erro"></p>
         <button id="btn-cad-mot" class="btn principal" type="button">Cadastrar motorista</button>
       </div>
+      <div id="lista-solicitacoes" class="hidden"></div>
       <div id="lista-motoristas" class="hidden"></div>
     </div>
     <div id="clientes" class="hidden"><input id="busca-cliente" placeholder="Buscar por nome ou telefone"><div id="lista-clientes"></div></div>
@@ -110,6 +114,40 @@
     <button id="btn-apagar" class="btn secundario" type="button">Apagar histórico</button><p id="aviso-apagar" class="dica hidden"></p><div id="lista-hist"></div></div>
   </main>
 </section>
+
+<div id="parceiro-tela" class="pix hidden"><div class="pix-card parc">
+  <h2>Seja motorista parceiro</h2>
+  <p id="parc-estado" class="sub"></p>
+  <div id="parc-form">
+    <ul class="parc-lista"><li>Você aceita as corridas que quiser e recebe direto dos passageiros.</li><li><b class="t-dias"></b> de teste grátis, a partir da aprovação.</li><li>Depois, mensalidade de <b class="t-valor"></b>, paga por Pix.</li><li>O administrador conversa com você, confere seus documentos e aprova o cadastro.</li></ul>
+    <div class="termos"><b>Termos e Condições do Motorista Parceiro (versão 1.0)</b>
+<p><b>1. O que é o LZ EXPRESS.</b> É uma plataforma que aproxima passageiros e motoristas de moto táxi. Ele não presta o serviço de transporte, não é empregador do motorista e não retém o valor das corridas.</p>
+<p><b>2. Cadastro e aprovação.</b> O pedido passa pela análise do administrador, que conversa com você e confere seus documentos pessoalmente. O administrador pode aprovar ou recusar o pedido.</p>
+<p><b>3. Exigências legais.</b> Você declara possuir habilitação compatível, moto regularizada e as autorizações exigidas pela lei e pelo município, e se compromete a mantê-las em dia.</p>
+<p><b>4. Plano e pagamento.</b> Você tem <b class="t-dias"></b> de teste grátis, contados da aprovação. Depois, a mensalidade é de <b class="t-valor"></b>, paga por Pix ao administrador. Sem pagamento, o acesso a novos chamados é suspenso até a regularização. O valor pode mudar com aviso prévio, sem afetar o período já pago.</p>
+<p><b>5. Corridas.</b> Você escolhe quais chamados aceitar. O valor da corrida é pago diretamente pelo passageiro a você.</p>
+<p><b>6. Conduta.</b> Trate todos com respeito, use capacete e equipamentos de segurança, não conduza sob efeito de álcool ou drogas e respeite as leis de trânsito.</p>
+<p><b>7. Dados dos passageiros.</b> O telefone do passageiro não é exibido a você, e a conversa acontece pelo chat do app. É proibido guardar, copiar ou usar dados dos passageiros fora do app.</p>
+<p><b>8. Seus dados (LGPD).</b> Usamos seu nome, telefone, e-mail, chave Pix, localização durante as corridas, mensagens e avaliações apenas para operar o app. Você pode pedir a correção ou a exclusão dos seus dados ao administrador.</p>
+<p><b>9. Localização.</b> Durante uma corrida aceita, sua localização é compartilhada com o passageiro dessa corrida, até ela terminar.</p>
+<p><b>10. Avaliações.</b> Os passageiros avaliam as corridas de 1 a 5 estrelas. Avaliações ruins e repetidas podem levar à suspensão.</p>
+<p><b>11. Suspensão e saída.</b> O administrador pode suspender ou encerrar seu acesso se estes termos forem descumpridos. Você pode sair quando quiser, avisando o administrador. Não há reembolso proporcional da mensalidade já paga, salvo decisão do administrador.</p>
+<p><b>12. Responsabilidade.</b> O LZ EXPRESS não responde por acidentes, danos, multas ou conflitos ocorridos nas corridas.</p>
+<p><b>13. Mudanças e aceite.</b> Estes termos podem ser atualizados, e você será avisado. Ao marcar “Li e aceito”, você concorda com eles, e o app registra a data, a hora e a versão do aceite.</p></div>
+    <label class="aceite"><input type="checkbox" id="parc-aceite"> Li e aceito os Termos e Condições</label>
+    <button id="parc-enviar" class="btn principal" type="button" disabled>Aceitar e continuar</button>
+  </div>
+  <button id="parc-fechar" class="btn neutro" type="button">Voltar</button>
+</div></div>
+
+<div id="nota-tela" class="pix hidden"><div class="pix-card"><h2>Como foi a corrida?</h2><p id="nota-sub" class="sub"></p>
+  <div id="estrelas" class="estrelas"><button type="button" data-n="1" aria-label="1 estrela">★</button><button type="button" data-n="2" aria-label="2 estrelas">★</button><button type="button" data-n="3" aria-label="3 estrelas">★</button><button type="button" data-n="4" aria-label="4 estrelas">★</button><button type="button" data-n="5" aria-label="5 estrelas">★</button></div>
+  <button id="nota-depois" class="btn neutro" type="button">Agora não</button></div></div>
+
+<div id="loc-tela" class="pix hidden"><div class="pix-card"><h2>Onde está o motorista</h2><p id="loc-info" class="sub">Carregando...</p>
+  <div id="loc-mapa"></div>
+  <a id="loc-abrir" class="btn principal" target="_blank" rel="noopener">Abrir no Google Maps</a>
+  <button id="loc-fechar" class="btn neutro" type="button">Fechar</button></div></div>
 
 <div id="share-tela" class="pix hidden"><div class="pix-card">
   <h2>Compartilhar o app</h2><p class="sub">Peça para a pessoa abrir a câmera do celular e apontar para o QR Code.</p>
@@ -131,13 +169,17 @@
   <h2>Pagar com Pix</h2><p class="sub">Abra o app do seu banco e leia o QR Code</p>
   <div id="pix-qr" class="pix-qr"></div>
   <p id="pix-nome" class="pix-nome"></p>
+  <p id="pix-info" class="sub"></p>
   <button id="pix-copiar" class="btn principal" type="button">Copiar código Pix</button>
+  <a id="pix-avisar" class="btn neutro hidden" target="_blank" rel="noopener">Avisar o administrador</a>
   <button id="pix-fechar" class="btn secundario" type="button">Fechar</button>
 </div></div>
 
 <div id="instalar" class="instalar hidden"><span>Instale o LZ EXPRESS no celular</span><button id="btn-instalar">Instalar</button></div>
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=10"></script>
+<script type="module" src="app.js?v=11"></script>
 </body>
 </html>

@@ -7,7 +7,29 @@ service cloud.firestore {
     function ehMotorista() {
       return request.auth != null
         && exists(/databases/$(database)/documents/motoristas/$(request.auth.uid))
-        && get(/databases/$(database)/documents/motoristas/$(request.auth.uid)).data.ativo == true;
+        && get(/databases/$(database)/documents/motoristas/$(request.auth.uid)).data.ativo == true
+        && get(/databases/$(database)/documents/motoristas/$(request.auth.uid)).data.get("validoAte", timestamp.date(2100, 1, 1)) > request.time;
+    }
+    match /config/{id} {
+      allow read: if request.auth != null;
+      allow write: if admin();
+    }
+    match /avaliacoes/{mid} {
+      allow read: if request.auth != null && (admin() || request.auth.uid == mid);
+      allow write: if admin();
+    }
+    match /solicitacoes/{uid} {
+      allow read: if request.auth != null && (admin() || request.auth.uid == uid);
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['nome','telefone','email','status','aceiteEm','versaoTermos','criadoEm'])
+        && request.resource.data.status == "pendente"
+        && request.resource.data.aceiteEm == request.time;
+      allow update: if request.auth != null && (admin()
+        || (request.auth.uid == uid && resource.data.status == "recusada"
+            && request.resource.data.keys().hasOnly(['nome','telefone','email','status','aceiteEm','versaoTermos','criadoEm'])
+            && request.resource.data.status == "pendente"
+            && request.resource.data.aceiteEm == request.time));
+      allow delete: if admin();
     }
     match /motoristas/{uid} {
       allow read: if request.auth != null && (admin() || request.auth.uid == uid);
@@ -23,20 +45,48 @@ service cloud.firestore {
     }
     match /users/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || admin());
-      allow create, update: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['nome','telefone','email','criadoEm'])
+        && request.resource.data.get("nome", "").size() <= 80
+        && request.resource.data.get("telefone", "").size() <= 25;
+      allow update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['nome','telefone','email','criadoEm','ultimoChamado'])
+        && request.resource.data.get("nome", "").size() <= 80
+        && request.resource.data.get("telefone", "").size() <= 25
+        && (request.resource.data.get("ultimoChamado", null) == resource.data.get("ultimoChamado", null)
+            || request.resource.data.get("ultimoChamado", null) == request.time);
       allow delete: if admin();
     }
     match /contatos/{id} {
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow read: if request.auth != null && (admin() || resource.data.uid == request.auth.uid
-        || (ehMotorista() && get(/databases/$(database)/documents/chamados/$(id)).data.motoristaId == request.auth.uid));
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uid','telefone'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.get("telefone", "").size() <= 25;
+      allow read: if request.auth != null && (admin() || resource.data.uid == request.auth.uid);
       allow delete: if admin();
     }
     match /chamados/{id} {
+      match /mensagens/{mid} {
+        function parte() {
+          return get(/databases/$(database)/documents/chamados/$(id)).data.uid == request.auth.uid
+            || get(/databases/$(database)/documents/chamados/$(id)).data.get("motoristaId", "") == request.auth.uid;
+        }
+        allow read: if request.auth != null && (admin() || parte());
+        allow create: if request.auth != null && parte()
+          && get(/databases/$(database)/documents/chamados/$(id)).data.status == "aceito"
+          && request.resource.data.de == request.auth.uid
+          && request.resource.data.texto.size() <= 300;
+        allow delete: if admin();
+      }
       allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uid','nome','referencia','lat','lng','precisao','status','criadoEm'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == "aguardando"
-        && request.resource.data.get("referencia", "").size() <= 120;
+        && request.resource.data.get("nome", "").size() <= 80
+        && request.resource.data.get("referencia", "").size() <= 120
+        && request.resource.data.lat is number
+        && request.resource.data.lng is number
+        && request.time > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("ultimoChamado", timestamp.value(0)) + duration.value(60, "s");
       allow read: if request.auth != null && (admin() || resource.data.uid == request.auth.uid
         || (ehMotorista() && (resource.data.status == "aguardando" || resource.data.motoristaId == request.auth.uid)));
       allow update: if request.auth != null && (admin()
@@ -45,8 +95,14 @@ service cloud.firestore {
             && request.resource.data.motoristaId == request.auth.uid)
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid
             && request.resource.data.status == "finalizado")
+        || (ehMotorista() && resource.data.motoristaId == request.auth.uid && resource.data.status == "aceito"
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['motoristaPos']))
         || (resource.data.uid == request.auth.uid && request.resource.data.status == "cancelado"
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+        || (resource.data.uid == request.auth.uid && resource.data.status == "finalizado"
+            && !('nota' in resource.data)
+            && request.resource.data.nota in [1, 2, 3, 4, 5]
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nota'])));
       allow delete: if admin() && resource.data.status in ["finalizado", "cancelado"];
     }
   }

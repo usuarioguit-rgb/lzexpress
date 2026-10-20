@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteDoc, runTransaction, increment, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { PIX_PAYLOAD } from "./pix.js";
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteDoc, runTransaction, increment, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { PIX_PAYLOAD, PIX_CHAVE } from "./pix.js";
 import { MOTORISTA_NOME, MOTORISTA_ZAP } from "./motorista.js";
 import * as cfg from "./config.js";
 const { firebaseConfig, ADMIN_EMAIL } = cfg;
@@ -27,7 +27,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 
 let EU = null, cadastrando = null; const fones = {};
 let modoCadastro = false, unsubs = [], audioCtx = null;
-const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); };
+const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); seguirGPS(null); };
 
 function tela(id){ ["loading","auth","cliente","motorista"].forEach(t => $(t).classList.toggle("hidden", t !== id)); }
 function erroMsg(e){
@@ -75,13 +75,13 @@ $("btn-auth").onclick = async () => {
       cadastrando = { nome, telefone, email };
       try {
         const c = await createUserWithEmailAndPassword(auth, email, senha);
-        await setDoc(doc(db, "users", c.user.uid), { nome, telefone, email, criadoEm: serverTimestamp() });
+        await setDoc(doc(db, "users", c.user.uid), { nome, telefone, email, criadoEm: serverTimestamp() }, { merge:true });
       } catch (e) {
         if (e.code !== "auth/email-already-in-use") throw e;
         let c;
         try { c = await signInWithEmailAndPassword(auth, email, senha); }
         catch { cadastrando = null; throw Object.assign(new Error("senha"), { code: "app/senha-diferente" }); }
-        await setDoc(doc(db, "users", c.user.uid), { nome, telefone, email, criadoEm: serverTimestamp() });
+        await setDoc(doc(db, "users", c.user.uid), { nome, telefone, email, criadoEm: serverTimestamp() }, { merge:true });
       }
     } else {
       await signInWithEmailAndPassword(auth, email, senha);
@@ -112,19 +112,25 @@ const DESATIVADO = "Sua conta de motorista está desativada. Fale com o administ
 onAuthStateChanged(auth, async user => {
   parar(); EU = null;
   if (!user) { tela("auth"); return; }
+  unsubs.push(onSnapshot(doc(db,"config","plano"), d => { if (d.exists()) PLANO = { dias: d.data().dias ?? 7, valor: d.data().valor ?? 150 }; atualizarPlanoUI(); }, () => {}));
   if (user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) { iniciarPainel(user, true, null); tela("motorista"); return; }
   try {
     const m = await getDoc(doc(db,"motoristas",user.uid));
     if (m.exists()) {
       if (!m.data().ativo) { alert(DESATIVADO); await signOut(auth); return; }
       iniciarPainel(user, false, m.data());
-      unsubs.push(onSnapshot(doc(db,"motoristas",user.uid), d => { if (d.exists() && !d.data().ativo) { alert(DESATIVADO); signOut(auth); } }));
+      const v0 = m.data().validoAte ? m.data().validoAte.toMillis() : 0;
+      unsubs.push(onSnapshot(doc(db,"motoristas",user.uid), d => {
+        if (!d.exists()) return;
+        if (!d.data().ativo) { alert(DESATIVADO); signOut(auth); return; }
+        if ((d.data().validoAte ? d.data().validoAte.toMillis() : 0) !== v0) location.reload();
+      }));
       tela("motorista"); return;
     }
   } catch {}
   if (cadastrando) {
     const p = cadastrando; cadastrando = null;
-    try { await setDoc(doc(db,"users",user.uid), { ...p, criadoEm: serverTimestamp() }); } catch {}
+    try { await setDoc(doc(db,"users",user.uid), { ...p, criadoEm: serverTimestamp() }, { merge:true }); } catch {}
   }
   iniciarCliente(user); tela("cliente");
 });
@@ -152,6 +158,7 @@ function textoStatus(c){
   return TEXTOS[c.status] || TEXTOS.aguardando;
 }
 function iniciarCliente(user){
+  unsubs.push(onSnapshot(doc(db,"solicitacoes",user.uid), d => { solicitacao = d.exists() ? d.data() : null; atualizarParceiro(); }, () => {}));
   getDoc(doc(db,"users",user.uid)).then(s => { $("ola").textContent = s.exists() ? "Olá, " + s.data().nome.split(" ")[0] + "!" : "Olá!"; }).catch(()=>{});
   let ativo = null, online = null;
   const atualizarBotao = () => {
@@ -179,6 +186,13 @@ function iniciarCliente(user){
     aoMudarChat();
     $("btn-chat-cli").classList.toggle("hidden", !aceito);
     $("btn-chat-cli").onclick = () => aceito && abrirChat(aceito.id, aceito.motoristaNome || "o motorista");
+    ultCh = aceito;
+    $("btn-loc-cli").classList.toggle("hidden", !aceito);
+    if (!aceito) $("loc-tela").classList.add("hidden"); else if (!$("loc-tela").classList.contains("hidden")) desenharLoc();
+    const ign = (() => { try { return JSON.parse(localStorage.getItem("lz_ign") || "[]"); } catch { return []; } })();
+    if (ult.status === "finalizado" && ult.motoristaId && !ult.nota && !ign.includes(ult.id)) {
+      notaId = ult.id; $("nota-sub").textContent = "Avalie " + (ult.motoristaNome || "o motorista"); $("nota-tela").classList.remove("hidden");
+    } else if (notaId === ult.id || ult.nota) { notaId = null; $("nota-tela").classList.add("hidden"); }
   }, () => alert("Não foi possível carregar. Verifique a internet.")));
 
   $("btn-cancelar").onclick = () => ativo && updateDoc(doc(db,"chamados",ativo.id), { status:"cancelado" });
@@ -196,7 +210,7 @@ function iniciarCliente(user){
           const telefone = (prompt("Digite seu telefone (WhatsApp):") || "").trim();
           if (!nome || !telefone) { btn.disabled = false; return; }
           u = { nome, telefone, email: user.email };
-          await setDoc(doc(db,"users",user.uid), { ...u, criadoEm: serverTimestamp() });
+          await setDoc(doc(db,"users",user.uid), { ...u, criadoEm: serverTimestamp() }, { merge:true });
           $("ola").textContent = "Olá, " + nome.split(" ")[0] + "!";
         }
         const ch = doc(collection(db,"chamados")), lote = writeBatch(db);
@@ -206,10 +220,11 @@ function iniciarCliente(user){
           status:"aguardando", criadoEm:serverTimestamp()
         });
         lote.set(doc(db,"contatos",ch.id), { uid:user.uid, telefone:u.telefone });
+        lote.set(doc(db,"users",user.uid), { ultimoChamado:serverTimestamp() }, { merge:true });
         await lote.commit();
         avisarMotorista((u.nome||"Cliente").split(" ")[0]);
         $("referencia").value = "";
-      } catch { alert("Não foi possível enviar o chamado. Tente de novo."); }
+      } catch { alert("Não foi possível enviar o chamado. Espere 1 minuto e tente de novo."); }
       btn.disabled = false;
     }, err => {
       btn.disabled = false;
@@ -240,17 +255,18 @@ function abaMot(qual){
     $(aba).classList.toggle("ativa", n === qual); $(box).classList.toggle("hidden", n !== qual);
   });
 }
-function montarPix(chave, nome){
+function montarPix(chave, nome, valor){
   const t = (i,v) => i + String(v.length).padStart(2,"0") + v;
   const n = nome.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Za-z0-9 ]/g,"").toUpperCase().slice(0,25) || "MOTORISTA";
-  const p = t("00","01")+t("01","11")+t("26",t("00","br.gov.bcb.pix")+t("01",chave.trim()))+t("52","0000")+t("53","986")+t("58","BR")+t("59",n)+t("60","BELEM")+t("62",t("05","***"))+"6304";
+  const p = t("00","01")+t("01","11")+t("26",t("00","br.gov.bcb.pix")+t("01",chave.trim()))+t("52","0000")+t("53","986")+(valor ? t("54",Number(valor).toFixed(2)) : "")+t("58","BR")+t("59",n)+t("60","BELEM")+t("62",t("05","***"))+"6304";
   let c = 0xFFFF;
   for (const ch of new TextEncoder().encode(p)) { c ^= ch << 8; for (let k=0;k<8;k++) c = (c & 0x8000) ? ((c<<1)^0x1021)&0xFFFF : (c<<1)&0xFFFF; }
   return p + c.toString(16).toUpperCase().padStart(4,"0");
 }
 let pixAtual = "";
-function abrirPix(nome, payload){
-  pixAtual = payload; $("pix-nome").textContent = nome; $("pix-qr").innerHTML = "";
+function abrirPix(nome, payload, info = "", zap = ""){
+  pixAtual = payload; $("pix-nome").textContent = nome; $("pix-info").textContent = info; $("pix-qr").innerHTML = "";
+  $("pix-avisar").classList.toggle("hidden", !zap); if (zap) $("pix-avisar").href = zap;
   if (window.QRCode) new QRCode($("pix-qr"), { text: payload, width:260, height:260, correctLevel: QRCode.CorrectLevel.M });
   else $("pix-qr").textContent = "Sem internet para gerar o QR. Use o botão abaixo para copiar o código Pix.";
   $("pix-tela").classList.remove("hidden");
@@ -272,15 +288,33 @@ async function aceitar(id){
 }
 const seg = c => c.criadoEm?.seconds ?? 9e9;
 
+function desenharPlano(){
+  if (!EU || EU.admin) return;
+  const v = EU.valido, dias = v === null ? null : Math.ceil((v - Date.now()) / 86400000), venc = dias !== null && dias <= 0;
+  $("plano-tit").textContent = v === null ? "Plano sem vencimento" : venc ? "Plano vencido" : (EU.pago ? "Plano ativo" : "Teste grátis");
+  $("plano-sub").textContent = v === null ? "" : venc ? "Pague a mensalidade para voltar a receber chamados." : dias + (dias === 1 ? " dia restante" : " dias restantes") + " · vence em " + new Date(v).toLocaleDateString("pt-BR");
+  const c = $("plano-card");
+  c.classList.toggle("ok", v !== null && !venc && dias > 5); c.classList.toggle("av", v !== null && !venc && dias <= 5); c.classList.toggle("ve", venc);
+}
+const mediaTxt = (soma, total) => total ? (soma / total).toFixed(1).replace(".", ",") + " ★ (" + total + ")" : "sem avaliações";
+const tel55 = t => { const d = String(t || "").replace(/\D/g,""); return d.startsWith("55") && d.length > 11 ? d : "55" + d; };
+
 function iniciarPainel(user, admin, perfil){
-  EU = { uid:user.uid, admin,
+  const val = perfil && perfil.validoAte ? perfil.validoAte.toMillis() : null;
+  const expirado = !admin && val !== null && val < Date.now();
+  EU = { uid:user.uid, admin, valido:val, pago:!!(perfil && perfil.ultimoPagamento),
     nome: admin ? MOTORISTA_NOME : perfil.nome,
     zap: (admin ? MOTORISTA_ZAP : perfil.telefone) || "",
     pix: admin ? PIX_PAYLOAD : montarPix(perfil.pixChave || "", perfil.nome),
     pixNome: admin ? "Leandro Vanzeler Vasconcelos · Mercado Pago" : perfil.nome };
   ["aba-clientes","aba-motoristas","btn-apagar"].forEach(i => $(i).classList.toggle("hidden", !admin));
-  abaMot("ativos");
-  let online = false, histL = [], ocupado = false;
+  $("plano-card").classList.toggle("hidden", admin);
+  $("plano-adm").classList.toggle("hidden", !admin);
+  $("btn-online").classList.toggle("hidden", expirado);
+  document.querySelector("#motorista .abas").classList.toggle("hidden", expirado);
+  abaMot("ativos"); desenharPlano(); atualizarPlanoUI();
+  if (expirado) { $("lista").innerHTML = `<p class="vazio">Seu plano venceu. Toque em “Pagar mensalidade” para voltar a receber chamados.</p>`; return; }
+  let online = false, histL = [], ocupado = false, todosItens = [], desenharMot = null, acumMeu = { soma:0, total:0 };
   const primeira = {}, fontes = {};
   const btn = $("btn-online");
   const atualizarApagar = () => {
@@ -291,10 +325,11 @@ function iniciarPainel(user, admin, perfil){
   };
   const render = () => {
     const itens = [...new Map(Object.values(fontes).flat().map(c => [c.id, c])).values()];
+    todosItens = itens;
     const abertos = c => ["aguardando","aceito"].includes(c.status);
     ocupado = itens.some(c => c.status === "aceito" && c.motoristaId === EU.uid);
     const meuAtivo = itens.find(c => c.status === "aceito" && c.motoristaId === EU.uid);
-    aoMudarChat = render; monitorarChat(meuAtivo ? meuAtivo.id : null);
+    aoMudarChat = render; monitorarChat(meuAtivo ? meuAtivo.id : null); seguirGPS(meuAtivo ? meuAtivo.id : null);
     const ativos = itens.filter(c => (c.status === "aguardando" && (admin || !ocupado)) || (c.status === "aceito" && c.motoristaId === EU.uid)).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
     const hist = itens.filter(c => !abertos(c)).sort((a,b) => seg(b)-seg(a));
     histL = hist; atualizarApagar();
@@ -307,7 +342,7 @@ function iniciarPainel(user, admin, perfil){
         ${c.referencia ? `<div class="ref">Referência: ${esc(c.referencia)}</div>` : ""}
         <div class="acoes">
           <a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Google Maps</a>
-                    ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
+          ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
           ${esp ? (ocupado ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>`}
           ${!esp && meu ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
@@ -315,13 +350,16 @@ function iniciarPainel(user, admin, perfil){
     }).join("") : `<p class="vazio">Nenhum chamado por enquanto.</p>`;
     const hoje = new Date().toDateString();
     const feitas = hist.filter(c => c.status === "finalizado" && c.criadoEm && new Date(c.criadoEm.seconds*1000).toDateString() === hoje).length;
-    $("resumo").textContent = `Corridas finalizadas hoje: ${feitas} · No histórico: ${hist.length}`;
+    let nota = "";
+    if (!admin) { const mine = itens.filter(c => c.motoristaId === EU.uid && c.nota); nota = " · Minha nota: " + mediaTxt(mine.reduce((a,c) => a + c.nota, 0) + (acumMeu.soma || 0), mine.length + (acumMeu.total || 0)); }
+    $("resumo").textContent = `Corridas finalizadas hoje: ${feitas} · No histórico: ${hist.length}${nota}`;
     $("lista-hist").innerHTML = hist.length ? hist.map(c => {
       const meu = c.motoristaId === EU.uid || (admin && !c.motoristaId);
       return `<div class="chamado ${c.status==="finalizado"?"aceito":"fim"}"><h3>${esc(c.nome)}</h3>
-        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}${MOT_TXT[c.motivo] ? " ("+MOT_TXT[c.motivo]+")" : ""}${admin && c.motoristaNome ? "<br>Motorista: " + esc(c.motoristaNome) : ""}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}</div>
+        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}${MOT_TXT[c.motivo] ? " ("+MOT_TXT[c.motivo]+")" : ""}${admin && c.motoristaNome ? "<br>Motorista: " + esc(c.motoristaNome) : ""}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}${c.nota ? `<br>Nota: <span class="val-av">${"★".repeat(c.nota)}${"☆".repeat(5 - c.nota)}</span>` : ""}</div>
         ${c.status==="finalizado" && meu ? `<div class="acoes"><button class="b-ok" data-pix="1" style="grid-column:1/3">Receber por Pix</button></div>` : ""}</div>`;
     }).join("") : `<p class="vazio">Nenhuma corrida no histórico ainda.</p>`;
+    if (desenharMot) desenharMot();
   };
   const ouvir = (chave, q) => unsubs.push(onSnapshot(q, snap => {
     if (primeira[chave] && snap.docChanges().some(c => c.type === "added" && c.doc.data().status === "aguardando") && (admin || !ocupado)) beep();
@@ -331,10 +369,12 @@ function iniciarPainel(user, admin, perfil){
   }, e => alert("Erro ao carregar chamados: " + e.code)));
   const col = collection(db,"chamados");
   if (admin) ouvir("todos", query(col, orderBy("criadoEm","desc"), limit(100)));
-  else { ouvir("espera", query(col, where("status","==","aguardando"))); ouvir("meus", query(col, where("motoristaId","==",user.uid))); }
-
-  unsubs.push(onSnapshot(doc(db,"disponibilidade",user.uid), s => {
-    online = s.exists() && s.data().online === true;
+  else {
+    ouvir("espera", query(col, where("status","==","aguardando"))); ouvir("meus", query(col, where("motoristaId","==",user.uid)));
+    unsubs.push(onSnapshot(doc(db,"avaliacoes",user.uid), d => { acumMeu = d.exists() ? d.data() : { soma:0, total:0 }; render(); }, () => {}));
+  }
+  unsubs.push(onSnapshot(doc(db,"disponibilidade",user.uid), d => {
+    online = d.exists() && d.data().online === true;
     btn.className = "toggle " + (online ? "on" : "off");
     btn.innerHTML = '<i class="pt"></i>' + (online ? "ONLINE · toque para ficar offline" : "OFFLINE · toque para ficar online");
     atualizarApagar();
@@ -346,12 +386,17 @@ function iniciarPainel(user, admin, perfil){
 
   $("aba-clientes").onclick = () => abaMot("clientes");
   $("aba-motoristas").onclick = () => abaMot("motoristas");
-  $("btn-mostrar-form").onclick = () => { const oculto = $("form-mot").classList.toggle("hidden"); $("btn-mostrar-form").classList.toggle("sel", !oculto); };
-  $("btn-mostrar-lista").onclick = () => { const oculto = $("lista-motoristas").classList.toggle("hidden"); $("btn-mostrar-lista").classList.toggle("sel", !oculto); };
+  const alterna = (boxId, btnId) => { const oculto = $(boxId).classList.toggle("hidden"); $(btnId).classList.toggle("sel", !oculto); };
+  $("btn-mostrar-form").onclick = () => alterna("form-mot", "btn-mostrar-form");
+  $("btn-mostrar-lista").onclick = () => alterna("lista-motoristas", "btn-mostrar-lista");
+  $("btn-mostrar-sol").onclick = () => alterna("lista-solicitacoes", "btn-mostrar-sol");
   $("btn-apagar").onclick = async () => {
     if (online || !histL.length) return;
     if (!confirm("Apagar " + histL.length + " corridas do histórico? Isso não pode ser desfeito.")) return;
     try {
+      const por = {};
+      histL.forEach(c => { if (c.nota && c.motoristaId) { const a = por[c.motoristaId] || (por[c.motoristaId] = { soma:0, total:0 }); a.soma += c.nota; a.total++; } });
+      for (const [mid, a] of Object.entries(por)) await setDoc(doc(db,"avaliacoes",mid), { soma:increment(a.soma), total:increment(a.total) }, { merge:true });
       const refs = [];
       for (const c of histL) {
         refs.push(doc(db,"chamados",c.id), doc(db,"contatos",c.id));
@@ -362,6 +407,12 @@ function iniciarPainel(user, admin, perfil){
       }
     } catch { alert("Não foi possível apagar. Tente de novo."); }
   };
+  $("btn-plano-edit").onclick = () => {
+    const dias = parseInt(prompt("Dias de teste grátis:", PLANO.dias), 10); if (!(dias >= 0)) return;
+    const valor = parseFloat(String(prompt("Valor da mensalidade (R$):", PLANO.valor)).replace(",", ".")); if (!(valor > 0)) return;
+    setDoc(doc(db,"config","plano"), { dias, valor }).catch(() => alert("Não foi possível salvar."));
+  };
+
   let clientes = [];
   const mostrarClientes = () => {
     const q = $("busca-cliente").value.trim().toLowerCase();
@@ -385,32 +436,73 @@ function iniciarPainel(user, admin, perfil){
     mostrarClientes();
   }, () => {}));
 
-  let mots = [], cont = {};
+  let sols = [];
+  const desenharSol = () => {
+    const pend = sols.filter(x => x.status === "pendente").sort((a,b) => seg(a) - seg(b));
+    $("btn-mostrar-sol").textContent = "Solicitações de motoristas (" + pend.length + ")";
+    $("aba-motoristas").textContent = "Motoristas" + (pend.length ? " (" + pend.length + ")" : "");
+    $("lista-solicitacoes").innerHTML = pend.length ? pend.map(x => `<div class="chamado"><h3>${esc(x.nome)}</h3>
+      <div class="info">${esc(x.email)} · ${esc(x.telefone)}<br>Aceitou os termos em ${fmt(x.aceiteEm)} (v${esc(x.versaoTermos)})</div>
+      <div class="acoes"><a class="b-zap" target="_blank" href="https://wa.me/${tel55(x.telefone)}" style="grid-column:1/3">WhatsApp</a>
+      <button class="b-ok" data-sol="ok" data-id="${x.id}">Aprovar</button><button class="b-cancel" data-sol="no" data-id="${x.id}">Recusar</button></div></div>`).join("")
+      : `<p class="vazio">Nenhuma solicitação no momento.</p>`;
+  };
+  unsubs.push(onSnapshot(collection(db,"solicitacoes"), snap => { sols = snap.docs.map(d => ({id:d.id, ...d.data()})); desenharSol(); }, () => {}));
+  $("lista-solicitacoes").onclick = async e => {
+    const b = e.target.closest("[data-sol]"); if (!b) return;
+    const x = sols.find(y => y.id === b.dataset.id); if (!x) return;
+    try {
+      if (b.dataset.sol === "no") { if (confirm("Recusar " + x.nome + "?")) await updateDoc(doc(db,"solicitacoes",x.id), { status:"recusada" }); return; }
+      const chave = prompt("Chave Pix de " + x.nome + " (peça pelo WhatsApp):");
+      if (!chave || !chave.trim()) return;
+      await setDoc(doc(db,"motoristas",x.id), { nome:x.nome, telefone:tel55(x.telefone), email:x.email, pixChave:chave.trim(), ativo:true,
+        validoAte: Timestamp.fromMillis(Date.now() + PLANO.dias * 86400000), criadoEm:serverTimestamp() });
+      await updateDoc(doc(db,"solicitacoes",x.id), { status:"aprovada" });
+      alert(x.nome + " aprovado! Peça para ele fechar e abrir o app.");
+    } catch { alert("Não foi possível concluir. Tente de novo."); }
+  };
+
+  let mots = [], cont = {}, acum = {};
   const desenhar = () => {
     $("btn-mostrar-lista").textContent = "Ver motoristas cadastrados (" + mots.length + ")";
     const mes = new Date().toLocaleDateString("sv-SE").slice(0,7), dia = new Date().toLocaleDateString("sv-SE");
     $("lista-motoristas").innerHTML = mots.length ? mots.map(m => {
       const c = cont[m.id] || {}, dias = c.dias || {};
       const noMes = Object.entries(dias).filter(([d]) => d.startsWith(mes)).reduce((x,[,v]) => x + v, 0);
+      const v = m.validoAte ? m.validoAte.toMillis() : null, d = v === null ? null : Math.ceil((v - Date.now()) / 86400000);
+      const plano = v === null ? "Plano: sem vencimento" : d <= 0 ? "Plano: VENCIDO" : (m.ultimoPagamento ? "Plano ativo" : "Teste grátis") + ": " + d + (d === 1 ? " dia" : " dias");
+      const cor = v === null ? "" : d <= 0 ? "val-ve" : d <= 5 ? "val-av" : "val-ok";
+      const its = todosItens.filter(z => z.motoristaId === m.id && z.nota), a = acum[m.id] || {};
+      const nota = mediaTxt(its.reduce((s2,z) => s2 + z.nota, 0) + (a.soma || 0), its.length + (a.total || 0));
       return `<div class="chamado ${m.ativo?"aceito":"fim"}"><h3>${esc(m.nome)}${m.ativo ? "" : " (desativado)"}</h3>
-        <div class="info">${esc(m.email)} · ${esc(m.telefone)}<br>Corridas aceitas: hoje ${dias[dia] || 0} · mês ${noMes} · total ${c.total || 0}</div>
+        <div class="info">${esc(m.email)} · ${esc(m.telefone)}<br>Corridas aceitas: hoje ${dias[dia] || 0} · mês ${noMes} · total ${c.total || 0}<br>Nota: ${nota}<br><span class="${cor}">${plano}</span></div>
         <div class="acoes">
+          <button class="b-ok" data-mot="pagou" data-id="${m.id}" style="grid-column:1/3">Registrar pagamento (+30 dias)</button>
+          <button class="b-mapa" data-mot="dias" data-id="${m.id}">Dar dias</button>
           <button class="${m.ativo?"b-cancel":"b-ok"}" data-mot="alt" data-id="${m.id}">${m.ativo ? "Desativar" : "Ativar"}</button>
           <button class="b-mapa" data-mot="senha" data-id="${m.id}">Nova senha</button>
           <button class="b-waze" data-mot="pix" data-id="${m.id}">Editar Pix</button>
-          <button class="b-fim" data-mot="qr" data-id="${m.id}">Ver QR Pix</button>
+          <button class="b-fim" data-mot="qr" data-id="${m.id}" style="grid-column:1/3">Ver QR Pix</button>
         </div></div>`;
     }).join("") : `<p class="vazio">Nenhum motorista cadastrado.</p>`;
   };
+  desenharMot = desenhar;
   unsubs.push(onSnapshot(collection(db,"motoristas"), snap => { mots = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => (a.nome||"").localeCompare(b.nome||"","pt-BR")); desenhar(); }, () => {}));
   unsubs.push(onSnapshot(collection(db,"contagem"), snap => { cont = {}; snap.docs.forEach(d => cont[d.id] = d.data()); desenhar(); }, () => {}));
+  unsubs.push(onSnapshot(collection(db,"avaliacoes"), snap => { acum = {}; snap.docs.forEach(d => acum[d.id] = d.data()); desenhar(); }, () => {}));
   $("lista-motoristas").onclick = async e => {
     const b = e.target.closest("[data-mot]"); if (!b) return;
     const m = mots.find(x => x.id === b.dataset.id); if (!m) return;
+    const base = Math.max(m.validoAte ? m.validoAte.toMillis() : 0, Date.now());
     try {
       if (b.dataset.mot === "alt") {
         await updateDoc(doc(db,"motoristas",m.id), { ativo:!m.ativo });
         if (m.ativo) await setDoc(doc(db,"disponibilidade",m.id), { online:false }, { merge:true });
+      } else if (b.dataset.mot === "pagou") {
+        if (confirm("O pagamento de " + m.nome + " caiu no seu banco? Isso libera mais 30 dias.")) await updateDoc(doc(db,"motoristas",m.id), { validoAte: Timestamp.fromMillis(base + 30 * 86400000), ultimoPagamento: serverTimestamp() });
+      } else if (b.dataset.mot === "dias") {
+        const n = parseInt(prompt("Quantos dias dar para " + m.nome + "?", "7"), 10);
+        if (n > 0) await updateDoc(doc(db,"motoristas",m.id), { validoAte: Timestamp.fromMillis(base + n * 86400000) });
       } else if (b.dataset.mot === "senha") {
         await sendPasswordResetEmail(auth, m.email); alert("Enviamos um e-mail para " + m.nome + " criar nova senha.");
       } else if (b.dataset.mot === "pix") {
@@ -429,7 +521,7 @@ function iniciarPainel(user, admin, perfil){
     $("btn-cad-mot").disabled = true;
     try {
       const c = await createUserWithEmailAndPassword(authSec, email, senha);
-      await setDoc(doc(db,"motoristas",c.user.uid), { nome, telefone, email, pixChave, ativo:true, criadoEm:serverTimestamp() });
+      await setDoc(doc(db,"motoristas",c.user.uid), { nome, telefone, email, pixChave, ativo:true, validoAte: Timestamp.fromMillis(Date.now() + PLANO.dias * 86400000), criadoEm:serverTimestamp() });
       await signOut(authSec);
       ["m-nome","m-telefone","m-email","m-senha","m-pix"].forEach(i => $(i).value = "");
       $("m-erro").style.color = "#2E7D5B"; $("m-erro").textContent = "Motorista cadastrado!";
@@ -509,9 +601,77 @@ $("share-copiar").onclick = copiarLink;
 if (!navigator.share) $("share-nativo").classList.add("hidden");
 $("share-nativo").onclick = () => navigator.share({ title:"LZ EXPRESS", text:"Peça seu moto táxi pelo LZ EXPRESS:", url:LINK_APP }).catch(() => {});
 const zapAdm = String(MOTORISTA_ZAP || "").replace(/\D/g,"");
-if (zapAdm) {
+const zapLink = txt => zapAdm ? "https://wa.me/" + (zapAdm.length > 11 ? zapAdm : "55" + zapAdm) + "?text=" + encodeURIComponent(txt) : "";
+let PLANO = { dias:7, valor:150 }, solicitacao = null, notaId = null, ultCh = null, mapa = null, mkP = null, mkM = null;
+const brl = v => "R$ " + Number(v).toFixed(2).replace(".", ",");
+function atualizarPlanoUI(){
+  document.querySelectorAll(".t-dias").forEach(e => e.textContent = PLANO.dias + (PLANO.dias === 1 ? " dia" : " dias"));
+  document.querySelectorAll(".t-valor").forEach(e => e.textContent = brl(PLANO.valor));
+  $("plano-adm-txt").textContent = "Plano: " + PLANO.dias + " dias grátis · " + brl(PLANO.valor) + "/mês";
+}
+function atualizarParceiro(){
+  const st = solicitacao ? solicitacao.status : "";
   $("bloco-trabalhe").classList.remove("hidden");
-  $("btn-trabalhe").href = "https://wa.me/" + (zapAdm.length > 11 ? zapAdm : "55" + zapAdm) + "?text=" + encodeURIComponent("Olá! Quero trabalhar como motorista no LZ EXPRESS.");
+  $("btn-trabalhe").textContent = st === "pendente" ? "Solicitação enviada" : "Saiba mais";
+  const travado = st === "pendente" || st === "aprovada";
+  $("parc-form").classList.toggle("hidden", travado);
+  $("parc-estado").textContent = st === "pendente" ? "Solicitação enviada! O administrador vai entrar em contato pelo WhatsApp." : st === "aprovada" ? "Você foi aprovado! Feche e abra o app para ver o painel de motorista." : st === "recusada" ? "Sua solicitação anterior não foi aprovada. Você pode enviar de novo." : "";
+}
+$("btn-trabalhe").onclick = () => $("parceiro-tela").classList.remove("hidden");
+$("parc-fechar").onclick = () => $("parceiro-tela").classList.add("hidden");
+$("parc-aceite").onchange = () => { $("parc-enviar").disabled = !$("parc-aceite").checked; };
+$("parc-enviar").onclick = async () => {
+  const u = auth.currentUser; if (!u || !$("parc-aceite").checked) return;
+  $("parc-enviar").disabled = true;
+  try {
+    const d = (await getDoc(doc(db,"users",u.uid))).data() || {};
+    await setDoc(doc(db,"solicitacoes",u.uid), { nome:d.nome || "", telefone:d.telefone || "", email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"1.0", criadoEm:serverTimestamp() });
+    $("parc-aceite").checked = false;
+  } catch { alert("Não foi possível enviar. Tente de novo."); }
+  $("parc-enviar").disabled = !$("parc-aceite").checked;
+};
+$("btn-pagar").onclick = () => abrirPix("Leandro Vanzeler · Mercado Pago", montarPix(PIX_CHAVE, "Leandro Vanzeler", PLANO.valor),
+  "Pague " + brl(PLANO.valor) + " e avise o administrador. Ele libera seu acesso depois de conferir o pagamento.", zapLink("Paguei a mensalidade do LZ EXPRESS."));
+
+/* ---------- Avaliação e localização do motorista ---------- */
+$("estrelas").onclick = async e => {
+  const b = e.target.closest("button[data-n]"); if (!b || !notaId) return;
+  const id = notaId; notaId = null; $("nota-tela").classList.add("hidden");
+  try { await updateDoc(doc(db,"chamados",id), { nota:Number(b.dataset.n) }); } catch { alert("Não foi possível enviar a avaliação."); }
+};
+$("nota-depois").onclick = () => {
+  try { const ig = JSON.parse(localStorage.getItem("lz_ign") || "[]"); ig.push(notaId); localStorage.setItem("lz_ign", JSON.stringify(ig.slice(-50))); } catch {}
+  notaId = null; $("nota-tela").classList.add("hidden");
+};
+const km = (a,b,c,d) => { const r = x => x * Math.PI / 180, h = Math.sin(r(c-a)/2)**2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d-b)/2)**2; return 12742 * Math.asin(Math.sqrt(h)); };
+function desenharLoc(){
+  const c = ultCh;
+  if (!c || !c.motoristaPos) { $("loc-info").textContent = "Aguardando o GPS do motorista..."; return; }
+  const p = c.motoristaPos, d = km(c.lat, c.lng, p.lat, p.lng), min = Math.max(1, Math.round(d / 25 * 60)), seg2 = Math.max(0, Math.round((Date.now() - p.t) / 1000));
+  $("loc-info").textContent = "Motorista a " + (d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1).replace(".", ",") + " km") + " de você · cerca de " + min + " min · atualizado há " + (seg2 < 90 ? seg2 + " s" : Math.round(seg2 / 60) + " min");
+  $("loc-abrir").href = "https://www.google.com/maps/search/?api=1&query=" + p.lat + "," + p.lng;
+  if (!window.L) return;
+  if (!mapa) {
+    mapa = L.map("loc-mapa", { zoomControl:false });
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"© OpenStreetMap" }).addTo(mapa);
+    mkP = L.circleMarker([c.lat, c.lng], { radius:9, color:"#fff", weight:3, fillColor:"#2f7bff", fillOpacity:1 }).addTo(mapa);
+    mkM = L.circleMarker([p.lat, p.lng], { radius:9, color:"#fff", weight:3, fillColor:"#f2a82d", fillOpacity:1 }).addTo(mapa);
+  }
+  mkP.setLatLng([c.lat, c.lng]); mkM.setLatLng([p.lat, p.lng]);
+  mapa.invalidateSize(); mapa.fitBounds([[c.lat, c.lng], [p.lat, p.lng]], { padding:[30,30], maxZoom:17 });
+}
+$("btn-loc-cli").onclick = () => { $("loc-tela").classList.remove("hidden"); desenharLoc(); };
+$("loc-fechar").onclick = () => $("loc-tela").classList.add("hidden");
+let gpsId = null, gpsWatch = null, gpsUlt = 0;
+function seguirGPS(id){
+  if (id === gpsId) return;
+  if (gpsWatch !== null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; }
+  gpsId = id;
+  if (!id || !navigator.geolocation) return;
+  gpsWatch = navigator.geolocation.watchPosition(p => {
+    const t = Date.now(); if (t - gpsUlt < 10000) return; gpsUlt = t;
+    updateDoc(doc(db,"chamados",id), { motoristaPos:{ lat:p.coords.latitude, lng:p.coords.longitude, t } }).catch(() => {});
+  }, () => {}, { enableHighAccuracy:true, maximumAge:5000 });
 }
 
 /* ---------- PWA ---------- */
