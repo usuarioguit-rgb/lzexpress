@@ -112,7 +112,7 @@ const DESATIVADO = "Sua conta de motorista está desativada. Fale com o administ
 onAuthStateChanged(auth, async user => {
   parar(); EU = null;
   if (!user) { tela("auth"); return; }
-  unsubs.push(onSnapshot(doc(db,"config","plano"), d => { if (d.exists()) PLANO = { dias: d.data().dias ?? 7, valor: d.data().valor ?? 150 }; atualizarPlanoUI(); }, () => {}));
+  unsubs.push(onSnapshot(doc(db,"config","plano"), d => { if (d.exists()) PLANO = { dias: d.data().dias ?? 15, valor: d.data().valor ?? 100 }; atualizarPlanoUI(); }, () => {}));
   if (user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) { iniciarPainel(user, true, null); tela("motorista"); return; }
   try {
     const m = await getDoc(doc(db,"motoristas",user.uid));
@@ -310,8 +310,9 @@ function iniciarPainel(user, admin, perfil){
   ["aba-clientes","aba-motoristas","btn-apagar"].forEach(i => $(i).classList.toggle("hidden", !admin));
   $("plano-card").classList.toggle("hidden", admin);
   $("plano-adm").classList.toggle("hidden", !admin);
-  $("btn-online").classList.toggle("hidden", expirado);
+  $("btn-online").classList.toggle("hidden", expirado || admin);
   document.querySelector("#motorista .abas").classList.toggle("hidden", expirado);
+  if (admin) setDoc(doc(db,"disponibilidade",user.uid), { online:false }, { merge:true }).catch(() => {});
   abaMot("ativos"); desenharPlano(); atualizarPlanoUI();
   if (expirado) { $("lista").innerHTML = `<p class="vazio">Seu plano venceu. Toque em “Pagar mensalidade” para voltar a receber chamados.</p>`; return; }
   let online = false, histL = [], ocupado = false, todosItens = [], desenharMot = null, acumMeu = { soma:0, total:0 };
@@ -319,21 +320,20 @@ function iniciarPainel(user, admin, perfil){
   const btn = $("btn-online");
   const atualizarApagar = () => {
     if (!admin) return;
-    $("btn-apagar").disabled = online || !histL.length;
-    $("aviso-apagar").textContent = "Fique offline para apagar o histórico.";
-    $("aviso-apagar").classList.toggle("hidden", !online || !histL.length);
+    $("btn-apagar").disabled = !histL.length;
+    $("aviso-apagar").classList.add("hidden");
   };
   const render = () => {
     const itens = [...new Map(Object.values(fontes).flat().map(c => [c.id, c])).values()];
     todosItens = itens;
     const abertos = c => ["aguardando","aceito"].includes(c.status);
-    ocupado = itens.some(c => c.status === "aceito" && c.motoristaId === EU.uid);
-    const meuAtivo = itens.find(c => c.status === "aceito" && c.motoristaId === EU.uid);
+    ocupado = !admin && itens.some(c => c.status === "aceito" && c.motoristaId === EU.uid);
+    const meuAtivo = admin ? null : itens.find(c => c.status === "aceito" && c.motoristaId === EU.uid);
     aoMudarChat = render; monitorarChat(meuAtivo ? meuAtivo.id : null); seguirGPS(meuAtivo ? meuAtivo.id : null);
-    const ativos = itens.filter(c => (c.status === "aguardando" && (admin || !ocupado)) || (c.status === "aceito" && c.motoristaId === EU.uid)).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
+    const ativos = itens.filter(c => admin ? c.status === "aguardando" : ((c.status === "aguardando" && !ocupado) || (c.status === "aceito" && c.motoristaId === EU.uid))).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
     const hist = itens.filter(c => !abertos(c)).sort((a,b) => seg(b)-seg(a));
     histL = hist; atualizarApagar();
-    $("lista").innerHTML = ativos.length ? ativos.map(c => {
+    $("lista").innerHTML = (admin ? `<div class="resumo">Aguardando: ${ativos.length} · Em andamento agora: ${itens.filter(c => c.status === "aceito").length}</div>` : "") + (ativos.length ? ativos.map(c => {
       const meu = c.motoristaId === EU.uid, esp = c.status === "aguardando", ve = admin;
       if (ve && !(c.id in fones)) carregarFone(c, render);
       const fone = ve ? fones[c.id] : null, zap = String(fone || "").replace(/\D/g,"");
@@ -343,18 +343,18 @@ function iniciarPainel(user, admin, perfil){
         <div class="acoes">
           <a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Google Maps</a>
           ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
-          ${esp ? (ocupado ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>`}
+          ${esp ? (ocupado || admin ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>`}
           ${!esp && meu ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
         </div></div>`;
-    }).join("") : `<p class="vazio">Nenhum chamado por enquanto.</p>`;
+    }).join("") : `<p class="vazio">Nenhum chamado por enquanto.</p>`);
     const hoje = new Date().toDateString();
     const feitas = hist.filter(c => c.status === "finalizado" && c.criadoEm && new Date(c.criadoEm.seconds*1000).toDateString() === hoje).length;
     let nota = "";
     if (!admin) { const mine = itens.filter(c => c.motoristaId === EU.uid && c.nota); nota = " · Minha nota: " + mediaTxt(mine.reduce((a,c) => a + c.nota, 0) + (acumMeu.soma || 0), mine.length + (acumMeu.total || 0)); }
     $("resumo").textContent = `Corridas finalizadas hoje: ${feitas} · No histórico: ${hist.length}${nota}`;
     $("lista-hist").innerHTML = hist.length ? hist.map(c => {
-      const meu = c.motoristaId === EU.uid || (admin && !c.motoristaId);
+      const meu = !admin && c.motoristaId === EU.uid;
       return `<div class="chamado ${c.status==="finalizado"?"aceito":"fim"}"><h3>${esc(c.nome)}</h3>
         <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}${MOT_TXT[c.motivo] ? " ("+MOT_TXT[c.motivo]+")" : ""}${admin && c.motoristaNome ? "<br>Motorista: " + esc(c.motoristaNome) : ""}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}${c.nota ? `<br>Nota: <span class="val-av">${"★".repeat(c.nota)}${"☆".repeat(5 - c.nota)}</span>` : ""}</div>
         ${c.status==="finalizado" && meu ? `<div class="acoes"><button class="b-ok" data-pix="1" style="grid-column:1/3">Receber por Pix</button></div>` : ""}</div>`;
@@ -391,7 +391,7 @@ function iniciarPainel(user, admin, perfil){
   $("btn-mostrar-lista").onclick = () => alterna("lista-motoristas", "btn-mostrar-lista");
   $("btn-mostrar-sol").onclick = () => alterna("lista-solicitacoes", "btn-mostrar-sol");
   $("btn-apagar").onclick = async () => {
-    if (online || !histL.length) return;
+    if (!histL.length) return;
     if (!confirm("Apagar " + histL.length + " corridas do histórico? Isso não pode ser desfeito.")) return;
     try {
       const por = {};
@@ -602,7 +602,7 @@ if (!navigator.share) $("share-nativo").classList.add("hidden");
 $("share-nativo").onclick = () => navigator.share({ title:"LZ EXPRESS", text:"Peça seu moto táxi pelo LZ EXPRESS:", url:LINK_APP }).catch(() => {});
 const zapAdm = String(MOTORISTA_ZAP || "").replace(/\D/g,"");
 const zapLink = txt => zapAdm ? "https://wa.me/" + (zapAdm.length > 11 ? zapAdm : "55" + zapAdm) + "?text=" + encodeURIComponent(txt) : "";
-let PLANO = { dias:7, valor:150 }, solicitacao = null, notaId = null, ultCh = null, mapa = null, mkP = null, mkM = null;
+let PLANO = { dias:15, valor:100 }, solicitacao = null, notaId = null, ultCh = null, mapa = null, mkP = null, mkM = null;
 const brl = v => "R$ " + Number(v).toFixed(2).replace(".", ",");
 function atualizarPlanoUI(){
   document.querySelectorAll(".t-dias").forEach(e => e.textContent = PLANO.dias + (PLANO.dias === 1 ? " dia" : " dias"));
