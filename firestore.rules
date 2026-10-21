@@ -79,11 +79,15 @@ service cloud.firestore {
         allow delete: if admin();
       }
       allow create: if request.auth != null
-        && request.resource.data.keys().hasOnly(['uid','nome','referencia','lat','lng','precisao','status','criadoEm'])
+        && request.resource.data.keys().hasOnly(['uid','nome','referencia','destino','valor','lat','lng','precisao','status','criadoEm'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == "aguardando"
         && request.resource.data.get("nome", "").size() <= 80
         && request.resource.data.get("referencia", "").size() <= 120
+        && request.resource.data.get("destino", "").size() <= 100
+        && request.resource.data.get("valor", 0) is number
+        && request.resource.data.get("valor", 0) >= 0
+        && request.resource.data.get("valor", 0) <= 500
         && request.resource.data.lat is number
         && request.resource.data.lng is number
         && request.time > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("ultimoChamado", timestamp.value(0)) + duration.value(60, "s");

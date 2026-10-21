@@ -137,7 +137,7 @@ onAuthStateChanged(auth, async user => {
 
 /* ---------- Cliente ---------- */
 const TEXTOS = {
-  aguardando:["Procurando o moto táxi...","Seu chamado foi enviado. Aguarde um instante.",""],
+  aguardando:["Procurando o motorista mais próximo...","Seu chamado foi enviado. Aguarde um instante.",""],
   aceito:["Moto a caminho! 🏍️","O moto táxi aceitou e está indo até você. Fique no local e use o botão abaixo para conversar.","aceito"],
   finalizado:["Corrida finalizada","Obrigado por usar o LZ EXPRESS!","final"],
   cancelado:["Chamado cancelado","Você pode chamar novamente quando quiser.","final"]
@@ -152,8 +152,8 @@ const MOTIVOS_CLIENTE = {
   desistiu:"Chamado encerrado a pedido do cliente."
 };
 function textoStatus(c){
-  if (c.status === "aguardando" && c.aviso === "aguardar") return ["Aguarde um pouquinho","Os moto táxis estão ocupados no momento. Aguarde um pouco, assim que um aceitar você será atendido!",""];
-  if (c.status === "aceito") return ["Moto a caminho! 🏍️", (c.motoristaNome || MOTORISTA_NOME) + " aceitou seu chamado e está indo até você. Fique no local.","aceito"];
+  if (c.status === "aguardando" && onlineN > 0 && livresN === 0) return ["Aguarde um pouquinho","Os moto táxis estão ocupados no momento. Aguarde um pouco, assim que um deles ficar livre você será atendido!",""];
+  if (c.status === "aceito") return ["Moto a caminho! 🏍️", (c.motoristaNome || MOTORISTA_NOME) + " aceitou seu chamado e está indo até você. Fique no local e use o botão abaixo para conversar." + (c.valor > 0 ? " Valor combinado: " + brl(c.valor) + "." : ""),"aceito"];
   if (c.status === "cancelado" && MOTIVOS_CLIENTE[c.motivo]) return ["Chamado cancelado", MOTIVOS_CLIENTE[c.motivo], "final"];
   return TEXTOS[c.status] || TEXTOS.aguardando;
 }
@@ -167,7 +167,7 @@ function iniciarCliente(user){
     $("aviso-offline").classList.toggle("hidden", !!ativo || online !== false);
   };
   unsubs.push(onSnapshot(collection(db,"disponibilidade"),
-    snap => { online = snap.docs.some(d => d.data().online === true); atualizarBotao(); },
+    snap => { const on = snap.docs.filter(d => d.data().online === true); online = on.length > 0; onlineN = on.length; livresN = on.filter(d => d.data().ocupado !== true).length; atualizarBotao(); repintarStatus(); },
     () => { online = false; atualizarBotao(); }));
   unsubs.push(onSnapshot(query(collection(db,"chamados"), where("uid","==",user.uid)), snap => {
     const todos = snap.docs.map(d => ({id:d.id, ...d.data()}));
@@ -176,6 +176,7 @@ function iniciarCliente(user){
     ativo = ult && ["aguardando","aceito"].includes(ult.status) ? ult : null;
     atualizarBotao();
     $("btn-cancelar").classList.toggle("hidden", !(ativo && ativo.status === "aguardando"));
+    ultCli = ult || null;
     const aceito = ult && ult.status === "aceito" ? ult : null;
     monitorarChat(aceito ? aceito.id : null);
     if (!ult) { $("status").classList.add("hidden"); return; }
@@ -216,6 +217,7 @@ function iniciarCliente(user){
         const ch = doc(collection(db,"chamados")), lote = writeBatch(db);
         lote.set(ch, {
           uid:user.uid, nome:u.nome, referencia:$("referencia").value.trim().slice(0,120),
+          destino:$("destino").value.trim().slice(0,100), valor:Math.min(500, Math.max(0, parseFloat(String($("valor").value).replace(",", ".")) || 0)),
           lat:pos.coords.latitude, lng:pos.coords.longitude, precisao:Math.round(pos.coords.accuracy),
           status:"aguardando", criadoEm:serverTimestamp()
         });
@@ -223,7 +225,7 @@ function iniciarCliente(user){
         lote.set(doc(db,"users",user.uid), { ultimoChamado:serverTimestamp() }, { merge:true });
         await lote.commit();
         avisarMotorista((u.nome||"Cliente").split(" ")[0]);
-        $("referencia").value = "";
+        $("referencia").value = ""; $("destino").value = ""; $("valor").value = "";
       } catch { alert("Não foi possível enviar o chamado. Espere 1 minuto e tente de novo."); }
       btn.disabled = false;
     }, err => {
@@ -282,6 +284,7 @@ async function aceitar(id){
       const ref = doc(db,"chamados",id), s = await t.get(ref);
       if (!s.exists() || s.data().status !== "aguardando") throw new Error("ja");
       t.update(ref, { status:"aceito", motoristaId:EU.uid, motoristaNome:EU.nome, aceitoEm:serverTimestamp(), aviso:"" });
+      t.set(doc(db,"disponibilidade",EU.uid), { ocupado:true }, { merge:true });
       t.set(doc(db,"contagem",EU.uid), { total:increment(1), dias:{ [new Date().toLocaleDateString("sv-SE")]:increment(1) } }, { merge:true });
     });
   } catch (e) { alert(e.message === "ja" ? "Este chamado já foi aceito por outro motorista." : "Não foi possível aceitar. Tente de novo."); }
@@ -316,35 +319,53 @@ function iniciarPainel(user, admin, perfil){
   if (admin) setDoc(doc(db,"disponibilidade",user.uid), { online:false }, { merge:true }).catch(() => {});
   abaMot(admin ? "hist" : "ativos"); desenharPlano(); atualizarPlanoUI();
   if (expirado) { $("lista").innerHTML = `<p class="vazio">Seu plano venceu. Toque em “Pagar mensalidade” para voltar a receber chamados.</p>`; return; }
-  let online = false, histL = [], ocupado = false, todosItens = [], desenharMot = null, acumMeu = { soma:0, total:0 };
+  let online = false, histL = [], ocupado = false, todosItens = [], desenharMot = null, acumMeu = { soma:0, total:0 }, posAtual = null, dispOcup = false, visVistos = new Set(), visInit = false, lastSig = "";
   const primeira = {}, fontes = {};
+  const recusados = new Set((() => { try { return JSON.parse(localStorage.getItem("lz_rec") || "[]"); } catch { return []; } })());
   const btn = $("btn-online");
   const atualizarApagar = () => {
     if (!admin) return;
     $("btn-apagar").disabled = !histL.length;
     $("aviso-apagar").classList.add("hidden");
   };
-  const render = () => {
+  const render = leve => {
     const itens = [...new Map(Object.values(fontes).flat().map(c => [c.id, c])).values()];
     todosItens = itens;
     const abertos = c => ["aguardando","aceito"].includes(c.status);
     ocupado = !admin && itens.some(c => c.status === "aceito" && c.motoristaId === EU.uid);
     const meuAtivo = admin ? null : itens.find(c => c.status === "aceito" && c.motoristaId === EU.uid);
     aoMudarChat = render; monitorarChat(meuAtivo ? meuAtivo.id : null); seguirGPS(meuAtivo ? meuAtivo.id : null);
-    const ativos = (admin ? [] : itens.filter(c => (c.status === "aguardando" && !ocupado) || (c.status === "aceito" && c.motoristaId === EU.uid))).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
+    const agora = Date.now() / 1000;
+    const dist = c => posAtual ? km(posAtual.lat, posAtual.lng, c.lat, c.lng) : null;
+    const atraso = c => { const d = dist(c); return d === null ? 45 : d <= 1 ? 0 : d <= 2 ? 15 : d <= 4 ? 30 : 45; };
+    const visivel = c => !recusados.has(c.id) && c.criadoEm && agora - c.criadoEm.seconds >= atraso(c);
+    const distTxt = c => { const d = admin ? null : dist(c); return d === null ? "" : " · a " + (d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1).replace(".", ",") + " km") + " de você"; };
+    const ativos = (admin ? [] : itens.filter(c => (c.status === "aguardando" && !ocupado && visivel(c)) || (c.status === "aceito" && c.motoristaId === EU.uid))).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
     const hist = itens.filter(c => !abertos(c)).sort((a,b) => seg(b)-seg(a));
     histL = hist; atualizarApagar();
+    if (!admin && fontes.espera !== undefined) {
+      const novos = ativos.filter(c => c.status === "aguardando" && !visVistos.has(c.id));
+      if (visInit && novos.length) beep();
+      novos.forEach(c => visVistos.add(c.id)); visInit = true;
+    }
+    if (!admin && fontes.meus !== undefined && dispOcup !== ocupado) { dispOcup = ocupado; setDoc(doc(db,"disponibilidade",EU.uid), { ocupado }, { merge:true }).catch(() => {}); }
+    const sig = ativos.map(c => c.id + c.status).join(",") + "|" + ocupado;
+    if (leve === true && sig === lastSig) return;
+    lastSig = sig;
     $("lista").innerHTML = (admin ? `<div class="resumo">Aguardando: ${ativos.length} · Em andamento agora: ${itens.filter(c => c.status === "aceito").length}</div>` : "") + (ativos.length ? ativos.map(c => {
       const meu = c.motoristaId === EU.uid, esp = c.status === "aguardando", ve = admin;
       if (ve && !(c.id in fones)) carregarFone(c, render);
       const fone = ve ? fones[c.id] : null, zap = String(fone || "").replace(/\D/g,"");
       return `<div class="chamado ${esp?"":"aceito"}"><h3>${esc(c.nome)}</h3>
-        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} · precisão ~${c.precisao ?? "?"} m<br>${esp ? "" : "Atendendo: " + esc(c.motoristaNome || "?") + "<br>"}${ve ? (fone ? esc(fone) : (fone === null ? "carregando telefone..." : "")) : (esp ? "Contato pelo chat do app após aceitar" : "")}</div>
+        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} · precisão ~${c.precisao ?? "?"} m${distTxt(c)}<br>${esp ? "" : "Atendendo: " + esc(c.motoristaNome || "?") + "<br>"}${ve ? (fone ? esc(fone) : (fone === null ? "carregando telefone..." : "")) : (esp ? "Contato pelo chat do app após aceitar" : "")}</div>
         ${c.referencia ? `<div class="ref">Referência: ${esc(c.referencia)}</div>` : ""}
+        ${c.destino ? `<div class="ref">Destino: ${esc(c.destino)}</div>` : ""}
+        ${c.valor > 0 ? `<div class="ref">Valor oferecido: ${brl(c.valor)}</div>` : ""}
         <div class="acoes">
           <a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Google Maps</a>
           ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
           ${esp ? (ocupado || admin ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>`}
+          ${esp && !admin ? `<button class="b-cancel" data-rec="${c.id}">Recusar</button>` : ""}
           ${!esp && meu ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
         </div></div>`;
@@ -363,22 +384,30 @@ function iniciarPainel(user, admin, perfil){
     if (desenharMot) desenharMot();
   };
   const ouvir = (chave, q) => unsubs.push(onSnapshot(q, snap => {
-    if (primeira[chave] && snap.docChanges().some(c => c.type === "added" && c.doc.data().status === "aguardando") && !admin && !ocupado) beep();
     primeira[chave] = true;
     fontes[chave] = snap.docs.map(d => ({id:d.id, ...d.data()}));
     render();
   }, e => alert("Erro ao carregar chamados: " + e.code)));
   const col = collection(db,"chamados");
+  repintarPainel = render;
+  recusarId = id => { recusados.add(id); try { localStorage.setItem("lz_rec", JSON.stringify([...recusados].slice(-100))); } catch {} render(); };
+  if (!admin) {
+    const tick = setInterval(() => render(true), 5000); unsubs.push(() => clearInterval(tick));
+    if (navigator.geolocation) {
+      const w = navigator.geolocation.watchPosition(p => { posAtual = { lat:p.coords.latitude, lng:p.coords.longitude }; }, () => {}, { enableHighAccuracy:true, maximumAge:15000 });
+      unsubs.push(() => navigator.geolocation.clearWatch(w));
+    }
+  }
   if (admin) ouvir("todos", query(col, orderBy("criadoEm","desc"), limit(100)));
   else {
     ouvir("espera", query(col, where("status","==","aguardando"))); ouvir("meus", query(col, where("motoristaId","==",user.uid)));
     unsubs.push(onSnapshot(doc(db,"avaliacoes",user.uid), d => { acumMeu = d.exists() ? d.data() : { soma:0, total:0 }; render(); }, () => {}));
   }
   if (!admin) unsubs.push(onSnapshot(doc(db,"disponibilidade",user.uid), d => {
-    online = d.exists() && d.data().online === true;
+    online = d.exists() && d.data().online === true; dispOcup = d.exists() && d.data().ocupado === true;
     btn.className = "toggle " + (online ? "on" : "off");
     btn.innerHTML = '<i class="pt"></i>' + (online ? "ONLINE · toque para ficar offline" : "OFFLINE · toque para ficar online");
-    atualizarApagar();
+    atualizarApagar(); render();
   }));
   btn.onclick = () => setDoc(doc(db,"disponibilidade",user.uid), { online:!online, atualizadoEm:serverTimestamp() }).catch(() => alert("Não foi possível mudar o status."));
   $("aba-ativos").onclick = () => abaMot("ativos");
@@ -463,21 +492,25 @@ function iniciarPainel(user, admin, perfil){
     } catch { alert("Não foi possível concluir. Tente de novo."); }
   };
 
-  let mots = [], cont = {}, acum = {};
+  let mots = [], cont = {}, acum = {}, disp = {};
   const desenhar = () => {
     $("btn-mostrar-lista").textContent = "Ver motoristas cadastrados (" + mots.length + ")";
     const mes = new Date().toLocaleDateString("sv-SE").slice(0,7), dia = new Date().toLocaleDateString("sv-SE");
-    $("lista-motoristas").innerHTML = mots.length ? mots.map(m => {
+    const onl = mots.filter(m => disp[m.id] && disp[m.id].online), emCorrida = onl.filter(m => disp[m.id].ocupado).length, aguard = todosItens.filter(z => z.status === "aguardando").length;
+    const resumoMot = `<div class="resumo">${onl.length} online · ${onl.length - emCorrida} livre(s) · ${emCorrida} em corrida · ${aguard} chamado(s) aguardando</div>`;
+    $("lista-motoristas").innerHTML = resumoMot + (mots.length ? mots.map(m => {
       const c = cont[m.id] || {}, dias = c.dias || {};
       const noMes = Object.entries(dias).filter(([d]) => d.startsWith(mes)).reduce((x,[,v]) => x + v, 0);
+      const dsp = disp[m.id] || {}, sit = !dsp.online ? ["Offline","val-ve"] : dsp.ocupado ? ["Em corrida","val-av"] : ["Livre","val-ok"];
       const v = m.validoAte ? m.validoAte.toMillis() : null, d = v === null ? null : Math.ceil((v - Date.now()) / 86400000);
       const plano = v === null ? "Plano: sem vencimento" : d <= 0 ? "Plano: VENCIDO" : (m.ultimoPagamento ? "Plano ativo" : "Teste grátis") + ": " + d + (d === 1 ? " dia" : " dias");
       const cor = v === null ? "" : d <= 0 ? "val-ve" : d <= 5 ? "val-av" : "val-ok";
       const its = todosItens.filter(z => z.motoristaId === m.id && z.nota), a = acum[m.id] || {};
       const nota = mediaTxt(its.reduce((s2,z) => s2 + z.nota, 0) + (a.soma || 0), its.length + (a.total || 0));
       return `<div class="chamado ${m.ativo?"aceito":"fim"}"><h3>${esc(m.nome)}${m.ativo ? "" : " (desativado)"}</h3>
-        <div class="info">${esc(m.email)} · ${esc(m.telefone)}<br>Corridas aceitas: hoje ${dias[dia] || 0} · mês ${noMes} · total ${c.total || 0}<br>Nota: ${nota}<br><span class="${cor}">${plano}</span></div>
+        <div class="info">${esc(m.email)} · ${esc(m.telefone)}<br>Corridas aceitas: hoje ${dias[dia] || 0} · mês ${noMes} · total ${c.total || 0}<br>Nota: ${nota}<br>Situação: <span class="${sit[1]}">${sit[0]}</span><br><span class="${cor}">${plano}</span></div>
         <div class="acoes">
+          ${dsp.ocupado ? `<button class="b-esp" data-mot="liberar" data-id="${m.id}" style="grid-column:1/3">Liberar motorista (marcar como livre)</button>` : ""}
           <button class="b-ok" data-mot="pagou" data-id="${m.id}" style="grid-column:1/3">Registrar pagamento (+30 dias)</button>
           <button class="b-mapa" data-mot="dias" data-id="${m.id}">Dar dias</button>
           <button class="${m.ativo?"b-cancel":"b-ok"}" data-mot="alt" data-id="${m.id}">${m.ativo ? "Desativar" : "Ativar"}</button>
@@ -485,9 +518,10 @@ function iniciarPainel(user, admin, perfil){
           <button class="b-waze" data-mot="pix" data-id="${m.id}">Editar Pix</button>
           <button class="b-fim" data-mot="qr" data-id="${m.id}" style="grid-column:1/3">Ver QR Pix</button>
         </div></div>`;
-    }).join("") : `<p class="vazio">Nenhum motorista cadastrado.</p>`;
+    }).join("") : `<p class="vazio">Nenhum motorista cadastrado.</p>`);
   };
   desenharMot = desenhar;
+  unsubs.push(onSnapshot(collection(db,"disponibilidade"), snap => { disp = {}; snap.docs.forEach(d => disp[d.id] = d.data()); desenhar(); }, () => {}));
   unsubs.push(onSnapshot(collection(db,"motoristas"), snap => { mots = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => (a.nome||"").localeCompare(b.nome||"","pt-BR")); desenhar(); }, () => {}));
   unsubs.push(onSnapshot(collection(db,"contagem"), snap => { cont = {}; snap.docs.forEach(d => cont[d.id] = d.data()); desenhar(); }, () => {}));
   unsubs.push(onSnapshot(collection(db,"avaliacoes"), snap => { acum = {}; snap.docs.forEach(d => acum[d.id] = d.data()); desenhar(); }, () => {}));
@@ -504,6 +538,8 @@ function iniciarPainel(user, admin, perfil){
       } else if (b.dataset.mot === "dias") {
         const n = parseInt(prompt("Quantos dias dar para " + m.nome + "?", "7"), 10);
         if (n > 0) await updateDoc(doc(db,"motoristas",m.id), { validoAte: Timestamp.fromMillis(base + n * 86400000) });
+      } else if (b.dataset.mot === "liberar") {
+        await setDoc(doc(db,"disponibilidade",m.id), { ocupado:false }, { merge:true });
       } else if (b.dataset.mot === "senha") {
         await sendPasswordResetEmail(auth, m.email); alert("Enviamos um e-mail para " + m.nome + " criar nova senha.");
       } else if (b.dataset.mot === "pix") {
@@ -532,12 +568,14 @@ function iniciarPainel(user, admin, perfil){
 }
 
 $("lista").addEventListener("click", e => {
+  const rc = e.target.closest("[data-rec]"); if (rc) { recusarId(rc.dataset.rec); return; }
   const ch = e.target.closest("[data-chat]"); if (ch) { abrirChat(ch.dataset.chat, ch.dataset.nome); return; }
   const b = e.target.closest("button[data-id]"); if (!b) return;
   const a = b.dataset.a;
   if (a === "aguardar") { updateDoc(doc(db,"chamados",b.dataset.id), { aviso:"aguardar" }).catch(() => alert("Não foi possível avisar.")); return; }
   if (a === "aceito") { aceitar(b.dataset.id); return; }
   updateDoc(doc(db,"chamados",b.dataset.id), { status:"finalizado", finalizadoEm:serverTimestamp() }).catch(() => alert("Não foi possível finalizar."));
+  setDoc(doc(db,"disponibilidade",EU.uid), { ocupado:false }, { merge:true }).catch(() => {});
   abaMot("hist");
 });
 $("lista-hist").addEventListener("click", e => { if (e.target.closest("[data-pix]") && EU) abrirPix(EU.pixNome, EU.pix); });
@@ -603,8 +641,14 @@ if (!navigator.share) $("share-nativo").classList.add("hidden");
 $("share-nativo").onclick = () => navigator.share({ title:"LZ EXPRESS", text:"Peça seu moto táxi pelo LZ EXPRESS:", url:LINK_APP }).catch(() => {});
 const zapAdm = String(MOTORISTA_ZAP || "").replace(/\D/g,"");
 const zapLink = txt => zapAdm ? "https://wa.me/" + (zapAdm.length > 11 ? zapAdm : "55" + zapAdm) + "?text=" + encodeURIComponent(txt) : "";
+let livresN = 0, onlineN = 0, ultCli = null, repintarPainel = () => {}, recusarId = () => {};
 let PLANO = { dias:15, valor:100 }, solicitacao = null, notaId = null, ultCh = null, mapa = null, mkP = null, mkM = null;
 const brl = v => "R$ " + Number(v).toFixed(2).replace(".", ",");
+function repintarStatus(){
+  if (!ultCli) return;
+  const t = textoStatus(ultCli);
+  $("status").className = "status " + t[2]; $("status-titulo").textContent = t[0]; $("status-texto").textContent = t[1];
+}
 function atualizarPlanoUI(){
   document.querySelectorAll(".t-dias").forEach(e => e.textContent = PLANO.dias + (PLANO.dias === 1 ? " dia" : " dias"));
   document.querySelectorAll(".t-valor").forEach(e => e.textContent = brl(PLANO.valor));

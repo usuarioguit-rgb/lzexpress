@@ -70,6 +70,10 @@
     <div id="bloco-chamar">
       <label for="referencia">Ponto de referência (opcional)</label>
       <div class="campo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><input id="referencia" maxlength="120" placeholder="Ex.: em frente à padaria, portão azul"></div>
+      <label for="destino">Para onde vamos? (opcional)</label>
+      <div class="campo"><input id="destino" maxlength="100" placeholder="Ex.: Mercado Central"></div>
+      <label for="valor">Quanto você quer pagar? (opcional)</label>
+      <div class="campo"><span style="color:#f2c25b;font-weight:700">R$</span><input id="valor" inputmode="decimal" maxlength="7" placeholder="Ex.: 10"></div>
       <button id="btn-chamar" class="chamar" type="button"><span class="t">CHAMAR MOTO TÁXI</span><span class="s">Toque e um motorista vai até você</span></button>
     </div>
     <div id="status" class="status hidden">
@@ -180,6 +184,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=13"></script>
+<script type="module" src="app.js?v=14"></script>
 </body>
 </html>
