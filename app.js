@@ -308,12 +308,13 @@ function iniciarPainel(user, admin, perfil){
     pix: admin ? PIX_PAYLOAD : montarPix(perfil.pixChave || "", perfil.nome),
     pixNome: admin ? "Leandro Vanzeler Vasconcelos · Mercado Pago" : perfil.nome };
   ["aba-clientes","aba-motoristas","btn-apagar"].forEach(i => $(i).classList.toggle("hidden", !admin));
+  $("aba-ativos").classList.toggle("hidden", admin);
   $("plano-card").classList.toggle("hidden", admin);
   $("plano-adm").classList.toggle("hidden", !admin);
   $("btn-online").classList.toggle("hidden", expirado || admin);
   document.querySelector("#motorista .abas").classList.toggle("hidden", expirado);
   if (admin) setDoc(doc(db,"disponibilidade",user.uid), { online:false }, { merge:true }).catch(() => {});
-  abaMot("ativos"); desenharPlano(); atualizarPlanoUI();
+  abaMot(admin ? "hist" : "ativos"); desenharPlano(); atualizarPlanoUI();
   if (expirado) { $("lista").innerHTML = `<p class="vazio">Seu plano venceu. Toque em “Pagar mensalidade” para voltar a receber chamados.</p>`; return; }
   let online = false, histL = [], ocupado = false, todosItens = [], desenharMot = null, acumMeu = { soma:0, total:0 };
   const primeira = {}, fontes = {};
@@ -330,7 +331,7 @@ function iniciarPainel(user, admin, perfil){
     ocupado = !admin && itens.some(c => c.status === "aceito" && c.motoristaId === EU.uid);
     const meuAtivo = admin ? null : itens.find(c => c.status === "aceito" && c.motoristaId === EU.uid);
     aoMudarChat = render; monitorarChat(meuAtivo ? meuAtivo.id : null); seguirGPS(meuAtivo ? meuAtivo.id : null);
-    const ativos = itens.filter(c => admin ? c.status === "aguardando" : ((c.status === "aguardando" && !ocupado) || (c.status === "aceito" && c.motoristaId === EU.uid))).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
+    const ativos = (admin ? [] : itens.filter(c => (c.status === "aguardando" && !ocupado) || (c.status === "aceito" && c.motoristaId === EU.uid))).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
     const hist = itens.filter(c => !abertos(c)).sort((a,b) => seg(b)-seg(a));
     histL = hist; atualizarApagar();
     $("lista").innerHTML = (admin ? `<div class="resumo">Aguardando: ${ativos.length} · Em andamento agora: ${itens.filter(c => c.status === "aceito").length}</div>` : "") + (ativos.length ? ativos.map(c => {
@@ -362,7 +363,7 @@ function iniciarPainel(user, admin, perfil){
     if (desenharMot) desenharMot();
   };
   const ouvir = (chave, q) => unsubs.push(onSnapshot(q, snap => {
-    if (primeira[chave] && snap.docChanges().some(c => c.type === "added" && c.doc.data().status === "aguardando") && (admin || !ocupado)) beep();
+    if (primeira[chave] && snap.docChanges().some(c => c.type === "added" && c.doc.data().status === "aguardando") && !admin && !ocupado) beep();
     primeira[chave] = true;
     fontes[chave] = snap.docs.map(d => ({id:d.id, ...d.data()}));
     render();
@@ -373,7 +374,7 @@ function iniciarPainel(user, admin, perfil){
     ouvir("espera", query(col, where("status","==","aguardando"))); ouvir("meus", query(col, where("motoristaId","==",user.uid)));
     unsubs.push(onSnapshot(doc(db,"avaliacoes",user.uid), d => { acumMeu = d.exists() ? d.data() : { soma:0, total:0 }; render(); }, () => {}));
   }
-  unsubs.push(onSnapshot(doc(db,"disponibilidade",user.uid), d => {
+  if (!admin) unsubs.push(onSnapshot(doc(db,"disponibilidade",user.uid), d => {
     online = d.exists() && d.data().online === true;
     btn.className = "toggle " + (online ? "on" : "off");
     btn.innerHTML = '<i class="pt"></i>' + (online ? "ONLINE · toque para ficar offline" : "OFFLINE · toque para ficar online");
