@@ -310,14 +310,16 @@ function iniciarPainel(user, admin, perfil){
     zap: (admin ? MOTORISTA_ZAP : perfil.telefone) || "",
     pix: admin ? PIX_PAYLOAD : montarPix(perfil.pixChave || "", perfil.nome),
     pixNome: admin ? "Leandro Vanzeler Vasconcelos · Mercado Pago" : perfil.nome };
-  ["aba-clientes","aba-motoristas","btn-apagar"].forEach(i => $(i).classList.toggle("hidden", !admin));
+  ["aba-clientes","aba-motoristas"].forEach(i => $(i).classList.toggle("hidden", !admin));
+  $("btn-apagar").classList.add("hidden");
   $("aba-ativos").classList.toggle("hidden", admin);
+  $("aba-hist").classList.toggle("hidden", admin);
   $("plano-card").classList.toggle("hidden", admin);
   $("plano-adm").classList.toggle("hidden", !admin);
   $("btn-online").classList.toggle("hidden", expirado || admin);
   document.querySelector("#motorista .abas").classList.toggle("hidden", expirado);
   if (admin) setDoc(doc(db,"disponibilidade",user.uid), { online:false }, { merge:true }).catch(() => {});
-  abaMot(admin ? "hist" : "ativos"); desenharPlano(); atualizarPlanoUI();
+  abaMot(admin ? "motoristas" : "ativos"); desenharPlano(); atualizarPlanoUI();
   if (expirado) { $("lista").innerHTML = `<p class="vazio">Seu plano venceu. Toque em “Pagar mensalidade” para voltar a receber chamados.</p>`; return; }
   let online = false, histL = [], ocupado = false, todosItens = [], desenharMot = null, acumMeu = { soma:0, total:0 }, posAtual = null, dispOcup = false, visVistos = new Set(), visInit = false, lastSig = "";
   const primeira = {}, fontes = {};
@@ -331,6 +333,7 @@ function iniciarPainel(user, admin, perfil){
   const render = leve => {
     const itens = [...new Map(Object.values(fontes).flat().map(c => [c.id, c])).values()];
     todosItens = itens;
+    if (admin) aplicarNotas(itens);
     const abertos = c => ["aguardando","aceito"].includes(c.status);
     ocupado = !admin && itens.some(c => c.status === "aceito" && c.motoristaId === EU.uid);
     const meuAtivo = admin ? null : itens.find(c => c.status === "aceito" && c.motoristaId === EU.uid);
@@ -341,7 +344,7 @@ function iniciarPainel(user, admin, perfil){
     const visivel = c => !recusados.has(c.id) && c.criadoEm && agora - c.criadoEm.seconds >= atraso(c);
     const distTxt = c => { const d = admin ? null : dist(c); return d === null ? "" : " · a " + (d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1).replace(".", ",") + " km") + " de você"; };
     const ativos = (admin ? [] : itens.filter(c => (c.status === "aguardando" && !ocupado && visivel(c)) || (c.status === "aceito" && c.motoristaId === EU.uid))).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
-    const hist = itens.filter(c => !abertos(c)).sort((a,b) => seg(b)-seg(a));
+    const hist = admin ? [] : itens.filter(c => !abertos(c)).sort((a,b) => seg(b)-seg(a));
     histL = hist; atualizarApagar();
     if (!admin && fontes.espera !== undefined) {
       const novos = ativos.filter(c => c.status === "aguardando" && !visVistos.has(c.id));
@@ -373,7 +376,7 @@ function iniciarPainel(user, admin, perfil){
     const hoje = new Date().toDateString();
     const feitas = hist.filter(c => c.status === "finalizado" && c.criadoEm && new Date(c.criadoEm.seconds*1000).toDateString() === hoje).length;
     let nota = "";
-    if (!admin) { const mine = itens.filter(c => c.motoristaId === EU.uid && c.nota); nota = " · Minha nota: " + mediaTxt(mine.reduce((a,c) => a + c.nota, 0) + (acumMeu.soma || 0), mine.length + (acumMeu.total || 0)); }
+    if (!admin) { const mine = itens.filter(c => c.motoristaId === EU.uid && c.nota && !c.contado); nota = " · Minha nota: " + mediaTxt(mine.reduce((a,c) => a + c.nota, 0) + (acumMeu.soma || 0), mine.length + (acumMeu.total || 0)); }
     $("resumo").textContent = `Corridas finalizadas hoje: ${feitas} · No histórico: ${hist.length}${nota}`;
     $("lista-hist").innerHTML = hist.length ? hist.map(c => {
       const meu = !admin && c.motoristaId === EU.uid;
@@ -414,6 +417,25 @@ function iniciarPainel(user, admin, perfil){
   $("aba-hist").onclick = () => abaMot("hist");
   if (!admin) return;
 
+  const limparAntigos = async () => {
+    try {
+      const lim = Timestamp.fromMillis(Date.now() - 3 * 86400000);
+      const snap = await getDocs(query(collection(db,"chamados"), where("criadoEm","<",lim), limit(40)));
+      const velhos = snap.docs.filter(d => ["finalizado","cancelado"].includes(d.data().status));
+      for (let i = 0; i < velhos.length; i += 10) {
+        const lote = writeBatch(db), por = {};
+        for (const d of velhos.slice(i, i + 10)) {
+          const c = d.data();
+          if (c.nota && c.motoristaId) { const a2 = por[c.motoristaId] || (por[c.motoristaId] = { soma:0, total:0 }); a2.soma += c.nota; a2.total++; }
+          lote.delete(d.ref); lote.delete(doc(db,"contatos",d.id));
+          (await getDocs(collection(db,"chamados",d.id,"mensagens"))).forEach(m => lote.delete(m.ref));
+        }
+        for (const [mid, a2] of Object.entries(por)) lote.set(doc(db,"avaliacoes",mid), { soma:increment(a2.soma), total:increment(a2.total) }, { merge:true });
+        await lote.commit();
+      }
+    } catch {}
+  };
+  limparAntigos();
   $("aba-clientes").onclick = () => abaMot("clientes");
   $("aba-motoristas").onclick = () => abaMot("motoristas");
   const alterna = (boxId, btnId) => { const oculto = $(boxId).classList.toggle("hidden"); $(btnId).classList.toggle("sel", !oculto); };
@@ -505,7 +527,7 @@ function iniciarPainel(user, admin, perfil){
       const v = m.validoAte ? m.validoAte.toMillis() : null, d = v === null ? null : Math.ceil((v - Date.now()) / 86400000);
       const plano = v === null ? "Plano: sem vencimento" : d <= 0 ? "Plano: VENCIDO" : (m.ultimoPagamento ? "Plano ativo" : "Teste grátis") + ": " + d + (d === 1 ? " dia" : " dias");
       const cor = v === null ? "" : d <= 0 ? "val-ve" : d <= 5 ? "val-av" : "val-ok";
-      const its = todosItens.filter(z => z.motoristaId === m.id && z.nota), a = acum[m.id] || {};
+      const its = todosItens.filter(z => z.motoristaId === m.id && z.nota && !z.contado), a = acum[m.id] || {};
       const nota = mediaTxt(its.reduce((s2,z) => s2 + z.nota, 0) + (a.soma || 0), its.length + (a.total || 0));
       return `<div class="chamado ${m.ativo?"aceito":"fim"}"><h3>${esc(m.nome)}${m.ativo ? "" : " (desativado)"}</h3>
         <div class="info">${esc(m.email)} · ${esc(m.telefone)}<br>Corridas aceitas: hoje ${dias[dia] || 0} · mês ${noMes} · total ${c.total || 0}<br>Nota: ${nota}<br>Situação: <span class="${sit[1]}">${sit[0]}</span><br><span class="${cor}">${plano}</span></div>
@@ -517,6 +539,7 @@ function iniciarPainel(user, admin, perfil){
           <button class="b-mapa" data-mot="senha" data-id="${m.id}">Nova senha</button>
           <button class="b-waze" data-mot="pix" data-id="${m.id}">Editar Pix</button>
           <button class="b-fim" data-mot="qr" data-id="${m.id}" style="grid-column:1/3">Ver QR Pix</button>
+          ${!m.ativo ? `<button class="b-cancel" data-mot="apagar" data-id="${m.id}" style="grid-column:1/3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:8px"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>Apagar cadastro</button>` : ""}
         </div></div>`;
     }).join("") : `<p class="vazio">Nenhum motorista cadastrado.</p>`);
   };
@@ -538,6 +561,12 @@ function iniciarPainel(user, admin, perfil){
       } else if (b.dataset.mot === "dias") {
         const n = parseInt(prompt("Quantos dias dar para " + m.nome + "?", "7"), 10);
         if (n > 0) await updateDoc(doc(db,"motoristas",m.id), { validoAte: Timestamp.fromMillis(base + n * 86400000) });
+      } else if (b.dataset.mot === "apagar") {
+        if (m.ativo) { alert("Desative o motorista antes de apagar o cadastro."); return; }
+        if (!confirm("Apagar de vez o cadastro de " + m.nome + "? Isso remove o nome, o Pix, as notas e a contagem de corridas dele. Não dá para desfazer.")) return;
+        const lote = writeBatch(db);
+        ["motoristas","contagem","avaliacoes","disponibilidade","solicitacoes"].forEach(c => lote.delete(doc(db,c,m.id)));
+        await lote.commit();
       } else if (b.dataset.mot === "liberar") {
         await setDoc(doc(db,"disponibilidade",m.id), { ocupado:false }, { merge:true });
       } else if (b.dataset.mot === "senha") {
@@ -641,6 +670,21 @@ if (!navigator.share) $("share-nativo").classList.add("hidden");
 $("share-nativo").onclick = () => navigator.share({ title:"LZ EXPRESS", text:"Peça seu moto táxi pelo LZ EXPRESS:", url:LINK_APP }).catch(() => {});
 const zapAdm = String(MOTORISTA_ZAP || "").replace(/\D/g,"");
 const zapLink = txt => zapAdm ? "https://wa.me/" + (zapAdm.length > 11 ? zapAdm : "55" + zapAdm) + "?text=" + encodeURIComponent(txt) : "";
+const contando = new Set();
+async function aplicarNotas(itens){
+  const novos = itens.filter(c => c.nota && c.motoristaId && !c.contado && !contando.has(c.id));
+  if (!novos.length) return;
+  novos.forEach(c => contando.add(c.id));
+  try {
+    const lote = writeBatch(db), por = {};
+    novos.forEach(c => {
+      lote.update(doc(db,"chamados",c.id), { contado:true });
+      const a = por[c.motoristaId] || (por[c.motoristaId] = { soma:0, total:0 }); a.soma += c.nota; a.total++;
+    });
+    Object.entries(por).forEach(([mid, a]) => lote.set(doc(db,"avaliacoes",mid), { soma:increment(a.soma), total:increment(a.total) }, { merge:true }));
+    await lote.commit();
+  } catch { novos.forEach(c => contando.delete(c.id)); }
+}
 let livresN = 0, onlineN = 0, ultCli = null, repintarPainel = () => {}, recusarId = () => {};
 let PLANO = { dias:15, valor:100 }, solicitacao = null, notaId = null, ultCh = null, mapa = null, mkP = null, mkM = null;
 const brl = v => "R$ " + Number(v).toFixed(2).replace(".", ",");

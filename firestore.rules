@@ -42,6 +42,7 @@ service cloud.firestore {
     match /contagem/{uid} {
       allow read: if request.auth != null && (admin() || request.auth.uid == uid);
       allow write: if request.auth != null && request.auth.uid == uid && (admin() || ehMotorista());
+      allow delete: if admin();
     }
     match /users/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || admin());
