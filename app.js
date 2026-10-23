@@ -161,15 +161,17 @@ function textoStatus(c){
 }
 function iniciarCliente(user){
   iniciarMapaCliente();
+  unsubs.push(onSnapshot(collection(db,"locais"), snap => { locaisC = snap.docs.map(d => ({id:d.id, ...d.data()})); desenharLocaisC(); }, () => {}));
   unsubs.push(onSnapshot(doc(db,"solicitacoes",user.uid), d => { solicitacao = d.exists() ? d.data() : null; atualizarParceiro(); }, () => {}));
   getDoc(doc(db,"users",user.uid)).then(s => { $("ola").textContent = s.exists() ? "Olá, " + s.data().nome.split(" ")[0] + "!" : "Olá!"; }).catch(()=>{});
   let ativo = null, online = null;
   const atualizarBotao = () => {
-    $("bloco-chamar").classList.toggle("hidden", !!ativo || online !== true);
+    $("bloco-chamar").classList.toggle("hidden", !!ativo || online !== true || !!notaId);
     $("selo-online").classList.toggle("hidden", online !== true);
     $("aviso-offline").classList.toggle("hidden", !!ativo || online !== false);
-    if (!ativo && online === true) ajustarMapaCliente();
+    if (!ativo && online === true && !notaId) ajustarMapaCliente();
   };
+  atualizarBotaoGlobal = atualizarBotao;
   unsubs.push(onSnapshot(collection(db,"disponibilidade"),
     snap => { const on = snap.docs.filter(d => d.data().online === true); online = on.length > 0; onlineN = on.length; livresN = on.filter(d => d.data().ocupado !== true).length; atualizarBotao(); repintarStatus(); },
     () => { online = false; atualizarBotao(); }));
@@ -198,11 +200,13 @@ function iniciarCliente(user){
     if (ult.status === "finalizado" && ult.motoristaId && !ult.nota && !ign.includes(ult.id)) {
       notaId = ult.id; $("nota-sub").textContent = "Avalie " + (ult.motoristaNome || "o motorista"); $("nota-tela").classList.remove("hidden");
     } else if (notaId === ult.id || ult.nota) { notaId = null; $("nota-tela").classList.add("hidden"); }
+    atualizarBotao();
   }, () => alert("Não foi possível carregar. Verifique a internet.")));
 
   $("btn-cancelar").onclick = () => ativo && updateDoc(doc(db,"chamados",ativo.id), { status:"cancelado" });
   $("btn-chamar").onclick = async () => {
     const btn = $("btn-chamar");
+    if (foraArea) { alert("O LZ EXPRESS atende somente em Cametá (PA)."); return; }
     if (!navigator.geolocation) { alert("Seu celular não permite localização."); return; }
     btn.disabled = true;
     navigator.geolocation.getCurrentPosition(async pos => {
@@ -220,7 +224,7 @@ function iniciarCliente(user){
         }
         const ch = doc(collection(db,"chamados")), lote = writeBatch(db);
         lote.set(ch, {
-          uid:user.uid, nome:u.nome, referencia:$("referencia").value.trim().slice(0,120),
+          uid:user.uid, nome:u.nome, 
           destino:$("destino").value.trim().slice(0,100), valor:Math.min(500, Math.max(0, parseFloat(String($("valor").value).replace(",", ".")) || 0)),
           destLat: destC ? destC.lat : 0, destLng: destC ? destC.lng : 0, distKm: rotaC ? rotaC.km : 0, estimativa: rotaC ? rotaC.preco : 0, duracaoMin: rotaC ? rotaC.min : 0,
           lat:pos.coords.latitude, lng:pos.coords.longitude, precisao:Math.round(pos.coords.accuracy),
@@ -230,7 +234,7 @@ function iniciarCliente(user){
         lote.set(doc(db,"users",user.uid), { ultimoChamado:serverTimestamp() }, { merge:true });
         await lote.commit();
         avisarMotorista((u.nome||"Cliente").split(" ")[0]);
-        $("referencia").value = ""; $("destino").value = ""; $("valor").value = ""; limparDestino();
+        $("destino").value = ""; $("valor").value = ""; limparDestino();
       } catch { alert("Não foi possível enviar o chamado. Espere 1 minuto e tente de novo."); }
       btn.disabled = false;
     }, err => {
@@ -258,7 +262,7 @@ const fmt = (t, soHora) => !t ? "agora" : new Date(t.seconds*1000).toLocaleStrin
 const MOT_TXT = {nao_encontrado:"cliente não encontrado", fora_area:"fora da área", sem_resposta:"sem resposta", indisponivel:"sem moto disponível", problema_moto:"problema com a moto", duplicado:"duplicado", desistiu:"cliente desistiu"};
 const NOMES = {aguardando:"Aguardando",aceito:"Em andamento",finalizado:"Finalizada",cancelado:"Cancelada"};
 function abaMot(qual){
-  [["ativos","aba-ativos","lista"],["hist","aba-hist","hist"],["clientes","aba-clientes","clientes"],["motoristas","aba-motoristas","motoristas"]].forEach(([n,aba,box]) => {
+  [["ativos","aba-ativos","lista"],["hist","aba-hist","hist"],["clientes","aba-clientes","clientes"],["motoristas","aba-motoristas","motoristas"],["locais","aba-locais","locais"]].forEach(([n,aba,box]) => {
     $(aba).classList.toggle("ativa", n === qual); $(box).classList.toggle("hidden", n !== qual);
   });
 }
@@ -315,7 +319,7 @@ function iniciarPainel(user, admin, perfil){
     zap: (admin ? MOTORISTA_ZAP : perfil.telefone) || "",
     pix: admin ? PIX_PAYLOAD : montarPix(perfil.pixChave || "", perfil.nome),
     pixNome: admin ? "Leandro Vanzeler Vasconcelos · Mercado Pago" : perfil.nome };
-  ["aba-clientes","aba-motoristas"].forEach(i => $(i).classList.toggle("hidden", !admin));
+  ["aba-clientes","aba-motoristas","aba-locais"].forEach(i => $(i).classList.toggle("hidden", !admin));
   $("btn-apagar").classList.add("hidden");
   $("aba-ativos").classList.toggle("hidden", admin);
   $("aba-hist").classList.toggle("hidden", admin);
@@ -473,6 +477,8 @@ function iniciarPainel(user, admin, perfil){
     setDoc(doc(db,"config","plano"), { dias, valor }).catch(() => alert("Não foi possível salvar."));
   };
 
+  $("aba-locais").onclick = () => { abaMot("locais"); iniciarMapaLocais(); desenharLocais(); };
+  unsubs.push(onSnapshot(collection(db,"locais"), snap => { locs = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => (a.nome||"").localeCompare(b.nome||"","pt-BR")); desenharLocais(); }, () => {}));
   $("btn-tarifa-edit").onclick = () => {
     const minimo = parseFloat(String(prompt("Valor mínimo da corrida (R$):", TARIFA.minimo)).replace(",", ".")); if (!(minimo > 0)) return;
     const porKm = parseFloat(String(prompt("Valor por quilômetro (R$):", TARIFA.porKm)).replace(",", ".")); if (!(porKm > 0)) return;
@@ -739,12 +745,12 @@ $("btn-pagar").onclick = () => abrirPix("Leandro Vanzeler · Mercado Pago", mont
 /* ---------- Avaliação e localização do motorista ---------- */
 $("estrelas").onclick = async e => {
   const b = e.target.closest("button[data-n]"); if (!b || !notaId) return;
-  const id = notaId; notaId = null; $("nota-tela").classList.add("hidden");
+  const id = notaId; notaId = null; $("nota-tela").classList.add("hidden"); atualizarBotaoGlobal();
   try { await updateDoc(doc(db,"chamados",id), { nota:Number(b.dataset.n) }); } catch { alert("Não foi possível enviar a avaliação."); }
 };
 $("nota-depois").onclick = () => {
   try { const ig = JSON.parse(localStorage.getItem("lz_ign") || "[]"); ig.push(notaId); localStorage.setItem("lz_ign", JSON.stringify(ig.slice(-50))); } catch {}
-  notaId = null; $("nota-tela").classList.add("hidden");
+  notaId = null; $("nota-tela").classList.add("hidden"); atualizarBotaoGlobal();
 };
 const km = (a,b,c,d) => { const r = x => x * Math.PI / 180, h = Math.sin(r(c-a)/2)**2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d-b)/2)**2; return 12742 * Math.asin(Math.sqrt(h)); };
 function desenharLoc(){
@@ -779,6 +785,10 @@ function seguirGPS(id){
 
 
 /* ---------- Mapa, destino e rota (passageiro) ---------- */
+const AREA = { sul:-2.45, norte:-2.05, oeste:-49.70, leste:-49.30, centro:[-2.2437, -49.4958] };
+const dentro = (lat, lng) => lat >= AREA.sul && lat <= AREA.norte && lng >= AREA.oeste && lng <= AREA.leste;
+const LIM = [[AREA.sul, AREA.oeste], [AREA.norte, AREA.leste]];
+let foraArea = false, locaisC = [], grpC = null, atualizarBotaoGlobal = () => {};
 let TARIFA = { minimo:5, porKm:2 };
 const precoDe = d => Math.max(TARIFA.minimo, Math.ceil(d * TARIFA.porKm * 2) / 2);
 function atualizarTarifaUI(){ $("tarifa-adm-txt").textContent = "Tarifa: mínimo " + brl(TARIFA.minimo) + " · " + brl(TARIFA.porKm) + " por km"; }
@@ -787,18 +797,31 @@ const enc = encodeURIComponent;
 function ajustarMapaCliente(){ if (mapC) setTimeout(() => mapC.invalidateSize(), 120); }
 function iniciarMapaCliente(){
   if (mapC || !window.L) return;
-  mapC = L.map("mapa-cliente").setView([-14, -52], 4);
+  mapC = L.map("mapa-cliente", { minZoom:12, maxBounds:LIM, maxBoundsViscosity:1 }).setView(AREA.centro, 15);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"© OpenStreetMap · rotas OSRM" }).addTo(mapC);
+  grpC = L.layerGroup().addTo(mapC);
+  mapC.on("zoomend", () => mapC.getContainer().classList.toggle("zoom-baixo", mapC.getZoom() < 15));
+  desenharLocaisC();
   mapC.on("click", e => { if (!marcando) return; marcando = false; $("btn-marcar").classList.remove("sel"); escolherDestino(e.latlng.lat, e.latlng.lng, $("destino").value.trim() || "Local marcado no mapa"); });
   if (!navigator.geolocation) { $("origem-txt").textContent = "Seu celular não permite localização."; return; }
   navigator.geolocation.getCurrentPosition(p => {
     origemC = { lat:p.coords.latitude, lng:p.coords.longitude };
+    foraArea = !dentro(origemC.lat, origemC.lng);
+    if (foraArea) { origemC = null; $("origem-txt").textContent = "O LZ EXPRESS atende somente em Cametá (PA). Você parece estar fora da cidade."; return; }
     mkO = L.circleMarker([origemC.lat, origemC.lng], { radius:9, color:"#fff", weight:3, fillColor:"#2f7bff", fillOpacity:1 }).addTo(mapC);
     mapC.setView([origemC.lat, origemC.lng], 16);
     $("origem-txt").textContent = "Sua localização atual";
     fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&lat=" + origemC.lat + "&lon=" + origemC.lng).then(r => r.json())
       .then(j => { if (j && j.display_name) $("origem-txt").textContent = "Você está em: " + j.display_name.split(",").slice(0,3).join(","); }).catch(() => {});
   }, () => { $("origem-txt").textContent = "Não conseguimos achar sua localização. Libere a localização para chamar."; }, { enableHighAccuracy:true, timeout:20000 });
+}
+function desenharLocaisC(){
+  if (!grpC) return;
+  grpC.clearLayers();
+  locaisC.forEach(l => {
+    const m = L.circleMarker([l.lat, l.lng], { radius:7, color:"#fff", weight:2, fillColor:"#f2a82d", fillOpacity:1 }).bindTooltip(l.nome, { permanent:true, direction:"top", className:"lz-tip" });
+    m.on("click", () => escolherDestino(l.lat, l.lng, l.nome)); m.addTo(grpC);
+  });
 }
 function limparDestino(){
   destC = null; rotaC = null; valorEditado = false; marcando = false;
@@ -807,28 +830,36 @@ function limparDestino(){
   $("info-rota").classList.add("hidden"); $("resultados-dest").classList.add("hidden"); $("btn-marcar").classList.remove("sel");
   if (mapC && origemC) mapC.setView([origemC.lat, origemC.lng], 16);
 }
+const norm = t => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
 async function buscarDestino(){
-  const q = $("destino").value.trim(); if (q.length < 3) return;
+  const q = $("destino").value.trim(); if (q.length < 2) return;
   const box = $("resultados-dest"); box.classList.remove("hidden"); box.innerHTML = '<p class="sub">Buscando...</p>';
-  let itens = [];
-  try {
-    const j = await (await fetch("https://photon.komoot.io/api/?limit=6&q=" + enc(q) + (origemC ? "&lat=" + origemC.lat + "&lon=" + origemC.lng : ""))).json();
-    itens = (j.features || []).map(f => { const p = f.properties || {}; return { lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0], nome:[p.name, p.street, p.district || p.city, p.state].filter(Boolean).join(", ") }; });
-  } catch {}
-  if (!itens.length) {
+  const nq = norm(q);
+  let itens = locaisC.filter(l => norm(l.nome).includes(nq)).map(l => ({ lat:l.lat, lng:l.lng, nome:l.nome }));
+  if (itens.length < 3) {
     try {
-      const vb = origemC ? "&viewbox=" + (origemC.lng - .4) + "," + (origemC.lat + .4) + "," + (origemC.lng + .4) + "," + (origemC.lat - .4) : "";
-      const j = await (await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=br&q=" + enc(q) + vb)).json();
-      itens = j.map(x => ({ lat:+x.lat, lng:+x.lon, nome:x.display_name.split(",").slice(0,4).join(",") }));
+      const j = await (await fetch("https://photon.komoot.io/api/?limit=8&bbox=" + AREA.oeste + "," + AREA.sul + "," + AREA.leste + "," + AREA.norte + "&lat=" + AREA.centro[0] + "&lon=" + AREA.centro[1] + "&q=" + enc(q))).json();
+      itens = itens.concat((j.features || []).map(f => { const p = f.properties || {}; return { lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0], nome:[p.name, p.street, p.district || p.city].filter(Boolean).join(", ") }; }));
     } catch {}
   }
-  if (origemC) { itens.forEach(i => { i.d = km(origemC.lat, origemC.lng, i.lat, i.lng); }); itens.sort((a,b) => a.d - b.d); }
+  if (itens.length < 2) {
+    try {
+      const j = await (await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&countrycodes=br&bounded=1&viewbox=" + AREA.oeste + "," + AREA.norte + "," + AREA.leste + "," + AREA.sul + "&q=" + enc(q))).json();
+      itens = itens.concat(j.map(x => ({ lat:+x.lat, lng:+x.lon, nome:x.display_name.split(",").slice(0,3).join(",") })));
+    } catch {}
+  }
+  const vistos = new Set();
+  itens = itens.filter(i => dentro(i.lat, i.lng) && i.nome && !vistos.has(norm(i.nome)) && vistos.add(norm(i.nome)));
+  const ref = origemC ? [origemC.lat, origemC.lng] : AREA.centro;
+  itens.forEach(i => { i.d = km(ref[0], ref[1], i.lat, i.lng); });
+  itens.sort((a,b) => a.d - b.d);
   itens = itens.slice(0,5); box._itens = itens;
   box.innerHTML = itens.length
-    ? itens.map((i,k) => `<button type="button" data-k="${k}">${esc(i.nome)}${i.d !== undefined ? " · a " + i.d.toFixed(1).replace(".", ",") + " km" : ""}</button>`).join("") + "<small>Não é este lugar? Toque em “Marcar destino no mapa”.</small>"
-    : '<p class="sub">Nenhum local encontrado. Tente outro nome ou toque em “Marcar destino no mapa”.</p>';
+    ? itens.map((i,k) => `<button type="button" data-k="${k}">${esc(i.nome)}${origemC ? " · a " + i.d.toFixed(1).replace(".", ",") + " km" : ""}</button>`).join("") + "<small>Não é este lugar? Toque em “Marcar destino no mapa”.</small>"
+    : '<p class="sub">Nenhum local encontrado em Cametá. Tente outro nome ou toque em “Marcar destino no mapa”.</p>';
 }
 function escolherDestino(lat, lng, nome){
+  if (!dentro(lat, lng)) { alert("Escolha um destino dentro de Cametá."); return; }
   destC = { lat, lng }; $("destino").value = nome.slice(0,100); $("resultados-dest").classList.add("hidden");
   if (mkD) mapC.removeLayer(mkD);
   mkD = L.circleMarker([lat, lng], { radius:9, color:"#fff", weight:3, fillColor:"#f2a82d", fillOpacity:1 }).addTo(mapC);
@@ -859,6 +890,53 @@ $("resultados-dest").onclick = e => { const b = e.target.closest("button[data-k]
 $("btn-marcar").onclick = () => {
   marcando = !marcando; $("btn-marcar").classList.toggle("sel", marcando);
   if (marcando) { $("info-rota").classList.remove("hidden"); $("info-rota").textContent = "Toque no mapa, no lugar para onde você quer ir."; }
+};
+
+/* ---------- Locais de Cametá (administrador) ---------- */
+const LIXO = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>';
+let locs = [], mapL = null, mkL = null, ptL = null, grpL = null;
+function iniciarMapaLocais(){
+  if (!window.L) return;
+  if (!mapL) {
+    mapL = L.map("mapa-locais", { minZoom:12, maxBounds:LIM, maxBoundsViscosity:1 }).setView(AREA.centro, 15);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"© OpenStreetMap" }).addTo(mapL);
+    grpL = L.layerGroup().addTo(mapL);
+    mapL.on("zoomend", () => mapL.getContainer().classList.toggle("zoom-baixo", mapL.getZoom() < 15));
+    mapL.on("click", e => marcarPonto(e.latlng.lat, e.latlng.lng));
+  }
+  setTimeout(() => mapL.invalidateSize(), 150);
+}
+function marcarPonto(lat, lng){
+  ptL = { lat, lng };
+  if (mkL) mkL.setLatLng([lat, lng]); else mkL = L.circleMarker([lat, lng], { radius:10, color:"#fff", weight:3, fillColor:"#2f7bff", fillOpacity:1 }).addTo(mapL);
+}
+function desenharLocais(){
+  $("lista-locais").innerHTML = locs.length ? locs.map(l => `<div class="chamado aceito"><h3>${esc(l.nome)}</h3>
+    <div class="acoes"><button class="b-mapa" data-loc="ver" data-id="${l.id}">Ver no mapa</button><button class="b-cancel" data-loc="del" data-id="${l.id}">${LIXO}Apagar</button></div></div>`).join("")
+    : `<p class="vazio">Nenhum local cadastrado ainda.</p>`;
+  if (!grpL) return;
+  grpL.clearLayers();
+  locs.forEach(l => L.circleMarker([l.lat, l.lng], { radius:7, color:"#fff", weight:2, fillColor:"#f2a82d", fillOpacity:1 }).bindTooltip(l.nome, { permanent:true, direction:"top", className:"lz-tip" }).addTo(grpL));
+}
+$("btn-l-gps").onclick = () => {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(p => { iniciarMapaLocais(); marcarPonto(p.coords.latitude, p.coords.longitude); mapL.setView([p.coords.latitude, p.coords.longitude], 18); }, () => { $("l-erro").textContent = "Não conseguimos achar sua localização."; }, { enableHighAccuracy:true, timeout:20000 });
+};
+$("btn-l-salvar").onclick = async () => {
+  const nome = $("l-nome").value.trim(); $("l-erro").textContent = "";
+  if (nome.length < 2) { $("l-erro").textContent = "Digite o nome do local."; return; }
+  if (!ptL) { $("l-erro").textContent = "Toque no mapa para marcar o local."; return; }
+  if (!dentro(ptL.lat, ptL.lng)) { $("l-erro").textContent = "O local precisa ficar em Cametá."; return; }
+  try {
+    await addDoc(collection(db,"locais"), { nome:nome.slice(0,80), lat:ptL.lat, lng:ptL.lng, criadoEm:serverTimestamp() });
+    $("l-nome").value = ""; if (mkL) { mapL.removeLayer(mkL); mkL = null; } ptL = null;
+  } catch { $("l-erro").textContent = "Não foi possível salvar."; }
+};
+$("lista-locais").onclick = e => {
+  const b = e.target.closest("[data-loc]"); if (!b) return;
+  const l = locs.find(x => x.id === b.dataset.id); if (!l) return;
+  if (b.dataset.loc === "ver") { iniciarMapaLocais(); mapL.setView([l.lat, l.lng], 18); window.scrollTo({ top:0, behavior:"smooth" }); }
+  else if (confirm("Apagar " + l.nome + " dos locais?")) deleteDoc(doc(db,"locais",l.id)).catch(() => alert("Não foi possível apagar."));
 };
 
 /* ---------- PWA ---------- */

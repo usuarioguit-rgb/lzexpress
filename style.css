@@ -253,3 +253,10 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .rota{background:rgba(242,194,91,.14);border:1px solid rgba(242,194,91,.4);color:#f6d57a;font-weight:700;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:15px}
 #tarifa-adm{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;margin-bottom:12px}
 #tarifa-adm button{flex:none;border:1.5px solid rgba(242,194,91,.6);background:transparent;color:#f2c25b;border-radius:10px;padding:8px 12px;font-weight:700;font-family:inherit}
+
+/* ===== Cametá: camadas, locais e etiquetas ===== */
+.pix{z-index:2000}.chat{z-index:2100}.instalar{z-index:1500}
+.lz-tip{background:rgba(11,31,58,.92);color:#f5f7fb;border:1px solid #f2c25b;border-radius:8px;font:700 11px 'DM Sans',sans-serif;padding:2px 6px;box-shadow:none}
+.lz-tip::before{display:none}
+.zoom-baixo .lz-tip{display:none}
+#mapa-locais{height:260px;border-radius:14px;overflow:hidden;margin:6px 0 10px;background:#0f2347}
