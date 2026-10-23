@@ -161,7 +161,6 @@ function textoStatus(c){
 }
 function iniciarCliente(user){
   iniciarMapaCliente();
-  unsubs.push(onSnapshot(collection(db,"locais"), snap => { locaisC = snap.docs.map(d => ({id:d.id, ...d.data()})); desenharLocaisC(); }, () => {}));
   unsubs.push(onSnapshot(doc(db,"solicitacoes",user.uid), d => { solicitacao = d.exists() ? d.data() : null; atualizarParceiro(); }, () => {}));
   getDoc(doc(db,"users",user.uid)).then(s => { $("ola").textContent = s.exists() ? "Olá, " + s.data().nome.split(" ")[0] + "!" : "Olá!"; }).catch(()=>{});
   let ativo = null, online = null;
@@ -262,7 +261,7 @@ const fmt = (t, soHora) => !t ? "agora" : new Date(t.seconds*1000).toLocaleStrin
 const MOT_TXT = {nao_encontrado:"cliente não encontrado", fora_area:"fora da área", sem_resposta:"sem resposta", indisponivel:"sem moto disponível", problema_moto:"problema com a moto", duplicado:"duplicado", desistiu:"cliente desistiu"};
 const NOMES = {aguardando:"Aguardando",aceito:"Em andamento",finalizado:"Finalizada",cancelado:"Cancelada"};
 function abaMot(qual){
-  [["ativos","aba-ativos","lista"],["hist","aba-hist","hist"],["clientes","aba-clientes","clientes"],["motoristas","aba-motoristas","motoristas"],["locais","aba-locais","locais"]].forEach(([n,aba,box]) => {
+  [["ativos","aba-ativos","lista"],["hist","aba-hist","hist"],["clientes","aba-clientes","clientes"],["motoristas","aba-motoristas","motoristas"]].forEach(([n,aba,box]) => {
     $(aba).classList.toggle("ativa", n === qual); $(box).classList.toggle("hidden", n !== qual);
   });
 }
@@ -319,7 +318,7 @@ function iniciarPainel(user, admin, perfil){
     zap: (admin ? MOTORISTA_ZAP : perfil.telefone) || "",
     pix: admin ? PIX_PAYLOAD : montarPix(perfil.pixChave || "", perfil.nome),
     pixNome: admin ? "Leandro Vanzeler Vasconcelos · Mercado Pago" : perfil.nome };
-  ["aba-clientes","aba-motoristas","aba-locais"].forEach(i => $(i).classList.toggle("hidden", !admin));
+  ["aba-clientes","aba-motoristas"].forEach(i => $(i).classList.toggle("hidden", !admin));
   $("btn-apagar").classList.add("hidden");
   $("aba-ativos").classList.toggle("hidden", admin);
   $("aba-hist").classList.toggle("hidden", admin);
@@ -351,7 +350,7 @@ function iniciarPainel(user, admin, perfil){
     const agora = Date.now() / 1000;
     const dist = c => posAtual ? km(posAtual.lat, posAtual.lng, c.lat, c.lng) : null;
     const atraso = c => { const d = dist(c); return d === null ? 45 : d <= 1 ? 0 : d <= 2 ? 15 : d <= 4 ? 30 : 45; };
-    const visivel = c => !recusados.has(c.id) && c.criadoEm && agora - c.criadoEm.seconds >= atraso(c);
+    const visivel = c => online && !recusados.has(c.id) && c.criadoEm && agora - c.criadoEm.seconds >= atraso(c);
     const distTxt = c => { const d = admin ? null : dist(c); return d === null ? "" : " · a " + (d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1).replace(".", ",") + " km") + " de você"; };
     const ativos = (admin ? [] : itens.filter(c => (c.status === "aguardando" && !ocupado && visivel(c)) || (c.status === "aceito" && c.motoristaId === EU.uid))).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
     const hist = admin ? [] : itens.filter(c => !abertos(c)).sort((a,b) => seg(b)-seg(a));
@@ -384,7 +383,7 @@ function iniciarPainel(user, admin, perfil){
           ${!esp && meu ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
         </div></div>`;
-    }).join("") : `<p class="vazio">Nenhum chamado por enquanto.</p>`);
+    }).join("") : `<p class="vazio">${online ? "Nenhum chamado por enquanto." : "Você está offline. Toque no botão vermelho no topo para ficar online e receber chamados."}</p>`);
     const hoje = new Date().toDateString();
     const feitas = hist.filter(c => c.status === "finalizado" && c.criadoEm && new Date(c.criadoEm.seconds*1000).toDateString() === hoje).length;
     let nota = "";
@@ -424,7 +423,7 @@ function iniciarPainel(user, admin, perfil){
     btn.innerHTML = '<i class="pt"></i>' + (online ? "ONLINE · toque para ficar offline" : "OFFLINE · toque para ficar online");
     atualizarApagar(); render();
   }));
-  btn.onclick = () => setDoc(doc(db,"disponibilidade",user.uid), { online:!online, atualizadoEm:serverTimestamp() }).catch(() => alert("Não foi possível mudar o status."));
+  btn.onclick = () => setDoc(doc(db,"disponibilidade",user.uid), { online:!online, atualizadoEm:serverTimestamp() }, { merge:true }).catch(() => alert("Não foi possível mudar o status."));
   $("aba-ativos").onclick = () => abaMot("ativos");
   $("aba-hist").onclick = () => abaMot("hist");
   if (!admin) return;
@@ -477,8 +476,6 @@ function iniciarPainel(user, admin, perfil){
     setDoc(doc(db,"config","plano"), { dias, valor }).catch(() => alert("Não foi possível salvar."));
   };
 
-  $("aba-locais").onclick = () => { abaMot("locais"); iniciarMapaLocais(); desenharLocais(); };
-  unsubs.push(onSnapshot(collection(db,"locais"), snap => { locs = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => (a.nome||"").localeCompare(b.nome||"","pt-BR")); desenharLocais(); }, () => {}));
   $("btn-tarifa-edit").onclick = () => {
     const minimo = parseFloat(String(prompt("Valor mínimo da corrida (R$):", TARIFA.minimo)).replace(",", ".")); if (!(minimo > 0)) return;
     const porKm = parseFloat(String(prompt("Valor por quilômetro (R$):", TARIFA.porKm)).replace(",", ".")); if (!(porKm > 0)) return;
@@ -788,7 +785,7 @@ function seguirGPS(id){
 const AREA = { sul:-2.45, norte:-2.05, oeste:-49.70, leste:-49.30, centro:[-2.2437, -49.4958] };
 const dentro = (lat, lng) => lat >= AREA.sul && lat <= AREA.norte && lng >= AREA.oeste && lng <= AREA.leste;
 const LIM = [[AREA.sul, AREA.oeste], [AREA.norte, AREA.leste]];
-let foraArea = false, locaisC = [], grpC = null, atualizarBotaoGlobal = () => {};
+let foraArea = false, atualizarBotaoGlobal = () => {};
 let TARIFA = { minimo:5, porKm:2 };
 const precoDe = d => Math.max(TARIFA.minimo, Math.ceil(d * TARIFA.porKm * 2) / 2);
 function atualizarTarifaUI(){ $("tarifa-adm-txt").textContent = "Tarifa: mínimo " + brl(TARIFA.minimo) + " · " + brl(TARIFA.porKm) + " por km"; }
@@ -799,9 +796,7 @@ function iniciarMapaCliente(){
   if (mapC || !window.L) return;
   mapC = L.map("mapa-cliente", { minZoom:12, maxBounds:LIM, maxBoundsViscosity:1 }).setView(AREA.centro, 15);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"© OpenStreetMap · rotas OSRM" }).addTo(mapC);
-  grpC = L.layerGroup().addTo(mapC);
   mapC.on("zoomend", () => mapC.getContainer().classList.toggle("zoom-baixo", mapC.getZoom() < 15));
-  desenharLocaisC();
   mapC.on("click", e => { if (!marcando) return; marcando = false; $("btn-marcar").classList.remove("sel"); escolherDestino(e.latlng.lat, e.latlng.lng, $("destino").value.trim() || "Local marcado no mapa"); });
   if (!navigator.geolocation) { $("origem-txt").textContent = "Seu celular não permite localização."; return; }
   navigator.geolocation.getCurrentPosition(p => {
@@ -815,14 +810,6 @@ function iniciarMapaCliente(){
       .then(j => { if (j && j.display_name) $("origem-txt").textContent = "Você está em: " + j.display_name.split(",").slice(0,3).join(","); }).catch(() => {});
   }, () => { $("origem-txt").textContent = "Não conseguimos achar sua localização. Libere a localização para chamar."; }, { enableHighAccuracy:true, timeout:20000 });
 }
-function desenharLocaisC(){
-  if (!grpC) return;
-  grpC.clearLayers();
-  locaisC.forEach(l => {
-    const m = L.circleMarker([l.lat, l.lng], { radius:7, color:"#fff", weight:2, fillColor:"#f2a82d", fillOpacity:1 }).bindTooltip(l.nome, { permanent:true, direction:"top", className:"lz-tip" });
-    m.on("click", () => escolherDestino(l.lat, l.lng, l.nome)); m.addTo(grpC);
-  });
-}
 function limparDestino(){
   destC = null; rotaC = null; valorEditado = false; marcando = false;
   if (mkD && mapC) { mapC.removeLayer(mkD); mkD = null; }
@@ -835,8 +822,8 @@ async function buscarDestino(){
   const q = $("destino").value.trim(); if (q.length < 2) return;
   const box = $("resultados-dest"); box.classList.remove("hidden"); box.innerHTML = '<p class="sub">Buscando...</p>';
   const nq = norm(q);
-  let itens = locaisC.filter(l => norm(l.nome).includes(nq)).map(l => ({ lat:l.lat, lng:l.lng, nome:l.nome }));
-  if (itens.length < 3) {
+  let itens = [];
+  {
     try {
       const j = await (await fetch("https://photon.komoot.io/api/?limit=8&bbox=" + AREA.oeste + "," + AREA.sul + "," + AREA.leste + "," + AREA.norte + "&lat=" + AREA.centro[0] + "&lon=" + AREA.centro[1] + "&q=" + enc(q))).json();
       itens = itens.concat((j.features || []).map(f => { const p = f.properties || {}; return { lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0], nome:[p.name, p.street, p.district || p.city].filter(Boolean).join(", ") }; }));
@@ -890,53 +877,6 @@ $("resultados-dest").onclick = e => { const b = e.target.closest("button[data-k]
 $("btn-marcar").onclick = () => {
   marcando = !marcando; $("btn-marcar").classList.toggle("sel", marcando);
   if (marcando) { $("info-rota").classList.remove("hidden"); $("info-rota").textContent = "Toque no mapa, no lugar para onde você quer ir."; }
-};
-
-/* ---------- Locais de Cametá (administrador) ---------- */
-const LIXO = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>';
-let locs = [], mapL = null, mkL = null, ptL = null, grpL = null;
-function iniciarMapaLocais(){
-  if (!window.L) return;
-  if (!mapL) {
-    mapL = L.map("mapa-locais", { minZoom:12, maxBounds:LIM, maxBoundsViscosity:1 }).setView(AREA.centro, 15);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"© OpenStreetMap" }).addTo(mapL);
-    grpL = L.layerGroup().addTo(mapL);
-    mapL.on("zoomend", () => mapL.getContainer().classList.toggle("zoom-baixo", mapL.getZoom() < 15));
-    mapL.on("click", e => marcarPonto(e.latlng.lat, e.latlng.lng));
-  }
-  setTimeout(() => mapL.invalidateSize(), 150);
-}
-function marcarPonto(lat, lng){
-  ptL = { lat, lng };
-  if (mkL) mkL.setLatLng([lat, lng]); else mkL = L.circleMarker([lat, lng], { radius:10, color:"#fff", weight:3, fillColor:"#2f7bff", fillOpacity:1 }).addTo(mapL);
-}
-function desenharLocais(){
-  $("lista-locais").innerHTML = locs.length ? locs.map(l => `<div class="chamado aceito"><h3>${esc(l.nome)}</h3>
-    <div class="acoes"><button class="b-mapa" data-loc="ver" data-id="${l.id}">Ver no mapa</button><button class="b-cancel" data-loc="del" data-id="${l.id}">${LIXO}Apagar</button></div></div>`).join("")
-    : `<p class="vazio">Nenhum local cadastrado ainda.</p>`;
-  if (!grpL) return;
-  grpL.clearLayers();
-  locs.forEach(l => L.circleMarker([l.lat, l.lng], { radius:7, color:"#fff", weight:2, fillColor:"#f2a82d", fillOpacity:1 }).bindTooltip(l.nome, { permanent:true, direction:"top", className:"lz-tip" }).addTo(grpL));
-}
-$("btn-l-gps").onclick = () => {
-  if (!navigator.geolocation) return;
-  navigator.geolocation.getCurrentPosition(p => { iniciarMapaLocais(); marcarPonto(p.coords.latitude, p.coords.longitude); mapL.setView([p.coords.latitude, p.coords.longitude], 18); }, () => { $("l-erro").textContent = "Não conseguimos achar sua localização."; }, { enableHighAccuracy:true, timeout:20000 });
-};
-$("btn-l-salvar").onclick = async () => {
-  const nome = $("l-nome").value.trim(); $("l-erro").textContent = "";
-  if (nome.length < 2) { $("l-erro").textContent = "Digite o nome do local."; return; }
-  if (!ptL) { $("l-erro").textContent = "Toque no mapa para marcar o local."; return; }
-  if (!dentro(ptL.lat, ptL.lng)) { $("l-erro").textContent = "O local precisa ficar em Cametá."; return; }
-  try {
-    await addDoc(collection(db,"locais"), { nome:nome.slice(0,80), lat:ptL.lat, lng:ptL.lng, criadoEm:serverTimestamp() });
-    $("l-nome").value = ""; if (mkL) { mapL.removeLayer(mkL); mkL = null; } ptL = null;
-  } catch { $("l-erro").textContent = "Não foi possível salvar."; }
-};
-$("lista-locais").onclick = e => {
-  const b = e.target.closest("[data-loc]"); if (!b) return;
-  const l = locs.find(x => x.id === b.dataset.id); if (!l) return;
-  if (b.dataset.loc === "ver") { iniciarMapaLocais(); mapL.setView([l.lat, l.lng], 18); window.scrollTo({ top:0, behavior:"smooth" }); }
-  else if (confirm("Apagar " + l.nome + " dos locais?")) deleteDoc(doc(db,"locais",l.id)).catch(() => alert("Não foi possível apagar."));
 };
 
 /* ---------- PWA ---------- */
