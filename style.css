@@ -239,3 +239,17 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .estrelas button{background:none;border:0;font-size:46px;line-height:1;color:#f2c25b;padding:0 2px}
 .estrelas button:active{transform:scale(1.2)}
 #loc-mapa{height:220px;border-radius:14px;overflow:hidden;margin:10px 0 12px;background:#0f2347}
+
+.acoes button svg{flex:none;margin-right:8px}
+
+/* ===== Mapa, destino e rota (passageiro) ===== */
+.origem{font-size:14px;color:#b4c3df;margin:0 0 8px}
+#mapa-cliente{height:230px;border-radius:16px;overflow:hidden;margin-bottom:14px;background:#0f2347;border:1px solid rgba(255,255,255,.14)}
+.buscar{flex:none;border:0;border-radius:10px;padding:9px 14px;background:linear-gradient(135deg,#f8da83,#e8821a);color:#0a1b3a;font-weight:700;font-family:inherit;font-size:14px}
+.resultados{display:flex;flex-direction:column;gap:6px;margin:-4px 0 12px}
+.resultados button{text-align:left;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.07);color:#f5f7fb;border-radius:12px;padding:12px 14px;font-family:inherit;font-size:14px;line-height:1.35}
+.resultados small,.resultados .sub{color:#8ea2c6;font-size:13px;margin:0}
+#cliente .btn.neutro.mini.sel{background:linear-gradient(135deg,#f8da83,#e8821a);color:#0a1b3a;border-color:transparent}
+.rota{background:rgba(242,194,91,.14);border:1px solid rgba(242,194,91,.4);color:#f6d57a;font-weight:700;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:15px}
+#tarifa-adm{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;margin-bottom:12px}
+#tarifa-adm button{flex:none;border:1.5px solid rgba(242,194,91,.6);background:transparent;color:#f2c25b;border-radius:10px;padding:8px 12px;font-weight:700;font-family:inherit}

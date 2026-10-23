@@ -80,7 +80,7 @@ service cloud.firestore {
         allow delete: if admin();
       }
       allow create: if request.auth != null
-        && request.resource.data.keys().hasOnly(['uid','nome','referencia','destino','valor','lat','lng','precisao','status','criadoEm'])
+        && request.resource.data.keys().hasOnly(['uid','nome','referencia','destino','valor','destLat','destLng','distKm','estimativa','duracaoMin','lat','lng','precisao','status','criadoEm'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == "aguardando"
         && request.resource.data.get("nome", "").size() <= 80
@@ -89,6 +89,14 @@ service cloud.firestore {
         && request.resource.data.get("valor", 0) is number
         && request.resource.data.get("valor", 0) >= 0
         && request.resource.data.get("valor", 0) <= 500
+        && request.resource.data.get("destLat", 0) is number
+        && request.resource.data.get("destLng", 0) is number
+        && request.resource.data.get("distKm", 0) is number
+        && request.resource.data.get("distKm", 0) <= 300
+        && request.resource.data.get("estimativa", 0) is number
+        && request.resource.data.get("estimativa", 0) <= 1000
+        && request.resource.data.get("duracaoMin", 0) is number
+        && request.resource.data.get("duracaoMin", 0) <= 600
         && request.resource.data.lat is number
         && request.resource.data.lng is number
         && request.time > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("ultimoChamado", timestamp.value(0)) + duration.value(60, "s");
@@ -102,6 +110,8 @@ service cloud.firestore {
             && request.resource.data.status == "finalizado")
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid && resource.data.status == "aceito"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['motoristaPos']))
+        || (ehMotorista() && resource.data.motoristaId == request.auth.uid && resource.data.status == "aceito"
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['iniciada','iniciadaEm']))
         || (resource.data.uid == request.auth.uid && request.resource.data.status == "cancelado"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
         || (resource.data.uid == request.auth.uid && resource.data.status == "finalizado"

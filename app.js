@@ -113,6 +113,7 @@ onAuthStateChanged(auth, async user => {
   parar(); EU = null;
   if (!user) { tela("auth"); return; }
   unsubs.push(onSnapshot(doc(db,"config","plano"), d => { if (d.exists()) PLANO = { dias: d.data().dias ?? 15, valor: d.data().valor ?? 100 }; atualizarPlanoUI(); }, () => {}));
+  unsubs.push(onSnapshot(doc(db,"config","tarifa"), d => { if (d.exists()) TARIFA = { minimo: d.data().minimo ?? 5, porKm: d.data().porKm ?? 2 }; atualizarTarifaUI(); }, () => {}));
   if (user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) { iniciarPainel(user, true, null); tela("motorista"); return; }
   try {
     const m = await getDoc(doc(db,"motoristas",user.uid));
@@ -153,11 +154,13 @@ const MOTIVOS_CLIENTE = {
 };
 function textoStatus(c){
   if (c.status === "aguardando" && onlineN > 0 && livresN === 0) return ["Aguarde um pouquinho","Os moto táxis estão ocupados no momento. Aguarde um pouco, assim que um deles ficar livre você será atendido!",""];
+  if (c.status === "aceito" && c.iniciada) return ["Corrida em andamento", "Você está a caminho do destino" + (c.destino ? ": " + c.destino : "") + "." + (c.valor > 0 ? " Valor combinado: " + brl(c.valor) + "." : ""), "aceito"];
   if (c.status === "aceito") return ["Moto a caminho! 🏍️", (c.motoristaNome || MOTORISTA_NOME) + " aceitou seu chamado e está indo até você. Fique no local e use o botão abaixo para conversar." + (c.valor > 0 ? " Valor combinado: " + brl(c.valor) + "." : ""),"aceito"];
   if (c.status === "cancelado" && MOTIVOS_CLIENTE[c.motivo]) return ["Chamado cancelado", MOTIVOS_CLIENTE[c.motivo], "final"];
   return TEXTOS[c.status] || TEXTOS.aguardando;
 }
 function iniciarCliente(user){
+  iniciarMapaCliente();
   unsubs.push(onSnapshot(doc(db,"solicitacoes",user.uid), d => { solicitacao = d.exists() ? d.data() : null; atualizarParceiro(); }, () => {}));
   getDoc(doc(db,"users",user.uid)).then(s => { $("ola").textContent = s.exists() ? "Olá, " + s.data().nome.split(" ")[0] + "!" : "Olá!"; }).catch(()=>{});
   let ativo = null, online = null;
@@ -165,6 +168,7 @@ function iniciarCliente(user){
     $("bloco-chamar").classList.toggle("hidden", !!ativo || online !== true);
     $("selo-online").classList.toggle("hidden", online !== true);
     $("aviso-offline").classList.toggle("hidden", !!ativo || online !== false);
+    if (!ativo && online === true) ajustarMapaCliente();
   };
   unsubs.push(onSnapshot(collection(db,"disponibilidade"),
     snap => { const on = snap.docs.filter(d => d.data().online === true); online = on.length > 0; onlineN = on.length; livresN = on.filter(d => d.data().ocupado !== true).length; atualizarBotao(); repintarStatus(); },
@@ -188,7 +192,7 @@ function iniciarCliente(user){
     $("btn-chat-cli").classList.toggle("hidden", !aceito);
     $("btn-chat-cli").onclick = () => aceito && abrirChat(aceito.id, aceito.motoristaNome || "o motorista");
     ultCh = aceito;
-    $("btn-loc-cli").classList.toggle("hidden", !aceito);
+    $("btn-loc-cli").classList.toggle("hidden", !aceito || !!aceito.iniciada);
     if (!aceito) $("loc-tela").classList.add("hidden"); else if (!$("loc-tela").classList.contains("hidden")) desenharLoc();
     const ign = (() => { try { return JSON.parse(localStorage.getItem("lz_ign") || "[]"); } catch { return []; } })();
     if (ult.status === "finalizado" && ult.motoristaId && !ult.nota && !ign.includes(ult.id)) {
@@ -218,6 +222,7 @@ function iniciarCliente(user){
         lote.set(ch, {
           uid:user.uid, nome:u.nome, referencia:$("referencia").value.trim().slice(0,120),
           destino:$("destino").value.trim().slice(0,100), valor:Math.min(500, Math.max(0, parseFloat(String($("valor").value).replace(",", ".")) || 0)),
+          destLat: destC ? destC.lat : 0, destLng: destC ? destC.lng : 0, distKm: rotaC ? rotaC.km : 0, estimativa: rotaC ? rotaC.preco : 0, duracaoMin: rotaC ? rotaC.min : 0,
           lat:pos.coords.latitude, lng:pos.coords.longitude, precisao:Math.round(pos.coords.accuracy),
           status:"aguardando", criadoEm:serverTimestamp()
         });
@@ -225,7 +230,7 @@ function iniciarCliente(user){
         lote.set(doc(db,"users",user.uid), { ultimoChamado:serverTimestamp() }, { merge:true });
         await lote.commit();
         avisarMotorista((u.nome||"Cliente").split(" ")[0]);
-        $("referencia").value = ""; $("destino").value = ""; $("valor").value = "";
+        $("referencia").value = ""; $("destino").value = ""; $("valor").value = ""; limparDestino();
       } catch { alert("Não foi possível enviar o chamado. Espere 1 minuto e tente de novo."); }
       btn.disabled = false;
     }, err => {
@@ -316,6 +321,7 @@ function iniciarPainel(user, admin, perfil){
   $("aba-hist").classList.toggle("hidden", admin);
   $("plano-card").classList.toggle("hidden", admin);
   $("plano-adm").classList.toggle("hidden", !admin);
+  $("tarifa-adm").classList.toggle("hidden", !admin);
   $("btn-online").classList.toggle("hidden", expirado || admin);
   document.querySelector("#motorista .abas").classList.toggle("hidden", expirado);
   if (admin) setDoc(doc(db,"disponibilidade",user.uid), { online:false }, { merge:true }).catch(() => {});
@@ -364,10 +370,12 @@ function iniciarPainel(user, admin, perfil){
         ${c.referencia ? `<div class="ref">Referência: ${esc(c.referencia)}</div>` : ""}
         ${c.destino ? `<div class="ref">Destino: ${esc(c.destino)}</div>` : ""}
         ${c.valor > 0 ? `<div class="ref">Valor oferecido: ${brl(c.valor)}</div>` : ""}
+        ${c.distKm > 0 ? `<div class="ref">Corrida de ${String(c.distKm).replace(".", ",")} km (~${c.duracaoMin} min) · estimativa ${brl(c.estimativa)}</div>` : ""}
         <div class="acoes">
-          <a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Google Maps</a>
+          ${c.iniciada && c.destLat ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.destLat},${c.destLng}">Navegar até o destino</a>` : `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Rota até o passageiro</a>`}
+          ${esp && c.destLat ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&origin=${c.lat},${c.lng}&destination=${c.destLat},${c.destLng}">Ver trajeto da corrida</a>` : ""}
           ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
-          ${esp ? (ocupado || admin ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>`}
+          ${esp ? (ocupado || admin ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : (c.iniciada ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>` : `<button class="b-ok" data-a="iniciar" data-id="${c.id}">Cheguei · iniciar corrida</button>`)}
           ${esp && !admin ? `<button class="b-cancel" data-rec="${c.id}">Recusar</button>` : ""}
           ${!esp && meu ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
@@ -465,6 +473,11 @@ function iniciarPainel(user, admin, perfil){
     setDoc(doc(db,"config","plano"), { dias, valor }).catch(() => alert("Não foi possível salvar."));
   };
 
+  $("btn-tarifa-edit").onclick = () => {
+    const minimo = parseFloat(String(prompt("Valor mínimo da corrida (R$):", TARIFA.minimo)).replace(",", ".")); if (!(minimo > 0)) return;
+    const porKm = parseFloat(String(prompt("Valor por quilômetro (R$):", TARIFA.porKm)).replace(",", ".")); if (!(porKm > 0)) return;
+    setDoc(doc(db,"config","tarifa"), { minimo, porKm }).catch(() => alert("Não foi possível salvar."));
+  };
   let clientes = [];
   const mostrarClientes = () => {
     const q = $("busca-cliente").value.trim().toLowerCase();
@@ -602,6 +615,7 @@ $("lista").addEventListener("click", e => {
   const b = e.target.closest("button[data-id]"); if (!b) return;
   const a = b.dataset.a;
   if (a === "aguardar") { updateDoc(doc(db,"chamados",b.dataset.id), { aviso:"aguardar" }).catch(() => alert("Não foi possível avisar.")); return; }
+  if (a === "iniciar") { updateDoc(doc(db,"chamados",b.dataset.id), { iniciada:true, iniciadaEm:serverTimestamp() }).catch(() => alert("Não foi possível iniciar a corrida.")); return; }
   if (a === "aceito") { aceitar(b.dataset.id); return; }
   updateDoc(doc(db,"chamados",b.dataset.id), { status:"finalizado", finalizadoEm:serverTimestamp() }).catch(() => alert("Não foi possível finalizar."));
   setDoc(doc(db,"disponibilidade",EU.uid), { ocupado:false }, { merge:true }).catch(() => {});
@@ -762,6 +776,90 @@ function seguirGPS(id){
     updateDoc(doc(db,"chamados",id), { motoristaPos:{ lat:p.coords.latitude, lng:p.coords.longitude, t } }).catch(() => {});
   }, () => {}, { enableHighAccuracy:true, maximumAge:5000 });
 }
+
+
+/* ---------- Mapa, destino e rota (passageiro) ---------- */
+let TARIFA = { minimo:5, porKm:2 };
+const precoDe = d => Math.max(TARIFA.minimo, Math.ceil(d * TARIFA.porKm * 2) / 2);
+function atualizarTarifaUI(){ $("tarifa-adm-txt").textContent = "Tarifa: mínimo " + brl(TARIFA.minimo) + " · " + brl(TARIFA.porKm) + " por km"; }
+let mapC = null, mkO = null, mkD = null, linhaR = null, origemC = null, destC = null, rotaC = null, valorEditado = false, marcando = false;
+const enc = encodeURIComponent;
+function ajustarMapaCliente(){ if (mapC) setTimeout(() => mapC.invalidateSize(), 120); }
+function iniciarMapaCliente(){
+  if (mapC || !window.L) return;
+  mapC = L.map("mapa-cliente").setView([-14, -52], 4);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"© OpenStreetMap · rotas OSRM" }).addTo(mapC);
+  mapC.on("click", e => { if (!marcando) return; marcando = false; $("btn-marcar").classList.remove("sel"); escolherDestino(e.latlng.lat, e.latlng.lng, $("destino").value.trim() || "Local marcado no mapa"); });
+  if (!navigator.geolocation) { $("origem-txt").textContent = "Seu celular não permite localização."; return; }
+  navigator.geolocation.getCurrentPosition(p => {
+    origemC = { lat:p.coords.latitude, lng:p.coords.longitude };
+    mkO = L.circleMarker([origemC.lat, origemC.lng], { radius:9, color:"#fff", weight:3, fillColor:"#2f7bff", fillOpacity:1 }).addTo(mapC);
+    mapC.setView([origemC.lat, origemC.lng], 16);
+    $("origem-txt").textContent = "Sua localização atual";
+    fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&lat=" + origemC.lat + "&lon=" + origemC.lng).then(r => r.json())
+      .then(j => { if (j && j.display_name) $("origem-txt").textContent = "Você está em: " + j.display_name.split(",").slice(0,3).join(","); }).catch(() => {});
+  }, () => { $("origem-txt").textContent = "Não conseguimos achar sua localização. Libere a localização para chamar."; }, { enableHighAccuracy:true, timeout:20000 });
+}
+function limparDestino(){
+  destC = null; rotaC = null; valorEditado = false; marcando = false;
+  if (mkD && mapC) { mapC.removeLayer(mkD); mkD = null; }
+  if (linhaR && mapC) { mapC.removeLayer(linhaR); linhaR = null; }
+  $("info-rota").classList.add("hidden"); $("resultados-dest").classList.add("hidden"); $("btn-marcar").classList.remove("sel");
+  if (mapC && origemC) mapC.setView([origemC.lat, origemC.lng], 16);
+}
+async function buscarDestino(){
+  const q = $("destino").value.trim(); if (q.length < 3) return;
+  const box = $("resultados-dest"); box.classList.remove("hidden"); box.innerHTML = '<p class="sub">Buscando...</p>';
+  let itens = [];
+  try {
+    const j = await (await fetch("https://photon.komoot.io/api/?limit=6&q=" + enc(q) + (origemC ? "&lat=" + origemC.lat + "&lon=" + origemC.lng : ""))).json();
+    itens = (j.features || []).map(f => { const p = f.properties || {}; return { lat:f.geometry.coordinates[1], lng:f.geometry.coordinates[0], nome:[p.name, p.street, p.district || p.city, p.state].filter(Boolean).join(", ") }; });
+  } catch {}
+  if (!itens.length) {
+    try {
+      const vb = origemC ? "&viewbox=" + (origemC.lng - .4) + "," + (origemC.lat + .4) + "," + (origemC.lng + .4) + "," + (origemC.lat - .4) : "";
+      const j = await (await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=br&q=" + enc(q) + vb)).json();
+      itens = j.map(x => ({ lat:+x.lat, lng:+x.lon, nome:x.display_name.split(",").slice(0,4).join(",") }));
+    } catch {}
+  }
+  if (origemC) { itens.forEach(i => { i.d = km(origemC.lat, origemC.lng, i.lat, i.lng); }); itens.sort((a,b) => a.d - b.d); }
+  itens = itens.slice(0,5); box._itens = itens;
+  box.innerHTML = itens.length
+    ? itens.map((i,k) => `<button type="button" data-k="${k}">${esc(i.nome)}${i.d !== undefined ? " · a " + i.d.toFixed(1).replace(".", ",") + " km" : ""}</button>`).join("") + "<small>Não é este lugar? Toque em “Marcar destino no mapa”.</small>"
+    : '<p class="sub">Nenhum local encontrado. Tente outro nome ou toque em “Marcar destino no mapa”.</p>';
+}
+function escolherDestino(lat, lng, nome){
+  destC = { lat, lng }; $("destino").value = nome.slice(0,100); $("resultados-dest").classList.add("hidden");
+  if (mkD) mapC.removeLayer(mkD);
+  mkD = L.circleMarker([lat, lng], { radius:9, color:"#fff", weight:3, fillColor:"#f2a82d", fillOpacity:1 }).addTo(mapC);
+  calcularRota();
+}
+async function calcularRota(){
+  if (!origemC || !destC) { $("info-rota").classList.remove("hidden"); $("info-rota").textContent = "Aguardando a sua localização para calcular a rota."; return; }
+  const info = $("info-rota"); info.classList.remove("hidden"); info.textContent = "Calculando a rota...";
+  let d, min, coords, aprox = false;
+  try {
+    const j = await (await fetch("https://router.project-osrm.org/route/v1/driving/" + origemC.lng + "," + origemC.lat + ";" + destC.lng + "," + destC.lat + "?overview=full&geometries=geojson")).json();
+    const r = j.routes[0]; d = r.distance / 1000; min = Math.max(1, Math.round(r.duration / 60)); coords = r.geometry.coordinates.map(c => [c[1], c[0]]);
+  } catch {
+    aprox = true; d = km(origemC.lat, origemC.lng, destC.lat, destC.lng) * 1.35; min = Math.max(1, Math.round(d / 25 * 60)); coords = [[origemC.lat, origemC.lng], [destC.lat, destC.lng]];
+  }
+  d = Math.round(d * 10) / 10;
+  rotaC = { km:d, min, preco:precoDe(d) };
+  if (linhaR) mapC.removeLayer(linhaR);
+  linhaR = L.polyline(coords, { color:"#f2a82d", weight:5 }).addTo(mapC);
+  mapC.fitBounds(linhaR.getBounds(), { padding:[30,30] });
+  info.textContent = String(d).replace(".", ",") + " km · cerca de " + min + " min · Estimativa: " + brl(rotaC.preco) + (aprox ? " (aproximada)" : "");
+  if (!valorEditado) $("valor").value = rotaC.preco.toFixed(2).replace(".", ",");
+}
+$("btn-buscar").onclick = buscarDestino;
+$("destino").addEventListener("keydown", e => { if (e.key === "Enter") buscarDestino(); });
+$("valor").addEventListener("input", () => { valorEditado = true; });
+$("resultados-dest").onclick = e => { const b = e.target.closest("button[data-k]"); if (!b) return; const i = $("resultados-dest")._itens[+b.dataset.k]; if (i) escolherDestino(i.lat, i.lng, i.nome); };
+$("btn-marcar").onclick = () => {
+  marcando = !marcando; $("btn-marcar").classList.toggle("sel", marcando);
+  if (marcando) { $("info-rota").classList.remove("hidden"); $("info-rota").textContent = "Toque no mapa, no lugar para onde você quer ir."; }
+};
 
 /* ---------- PWA ---------- */
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
