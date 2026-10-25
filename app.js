@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteDoc, runTransaction, increment, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { PIX_PAYLOAD, PIX_CHAVE } from "./pix.js";
 import { MOTORISTA_NOME, MOTORISTA_ZAP } from "./motorista.js";
@@ -29,6 +29,9 @@ let EU = null, cadastrando = null; const fones = {};
 let modoCadastro = false, unsubs = [], audioCtx = null;
 const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); seguirGPS(null); };
 
+const perfilKey = uid => "lz_perfil_" + uid;
+function nomeDe(user){ try { return JSON.parse(localStorage.getItem(perfilKey(user.uid)) || "{}").nome || user.displayName || ""; } catch { return user.displayName || ""; } }
+function guardarNome(user, nome){ try { localStorage.setItem(perfilKey(user.uid), JSON.stringify({ nome })); } catch {} updateProfile(user, { displayName:nome }).catch(() => {}); }
 function tela(id){ ["loading","auth","cliente","motorista"].forEach(t => $(t).classList.toggle("hidden", t !== id)); }
 function erroMsg(e){
   const m = {
@@ -65,23 +68,23 @@ $("aba-criar").onclick = () => setModo(true);
 
 $("btn-auth").onclick = async () => {
   const email = $("email").value.trim(), senha = $("senha").value;
-  const nome = $("nome").value.trim(), telefone = $("telefone").value.trim();
+  const nome = $("nome").value.trim();
   $("erro").textContent = "";
   if (!email || !senha) { $("erro").textContent = "Preencha e-mail e senha."; return; }
-  if (modoCadastro && (!nome || !telefone)) { $("erro").textContent = "Preencha seu nome e telefone."; return; }
+  if (modoCadastro && !nome) { $("erro").textContent = "Preencha seu nome."; return; }
   $("btn-auth").disabled = true;
   try {
     if (modoCadastro) {
-      cadastrando = { nome, telefone, email };
+      cadastrando = { nome };
       try {
         const c = await createUserWithEmailAndPassword(auth, email, senha);
-        await setDoc(doc(db, "users", c.user.uid), { nome, telefone, email, criadoEm: serverTimestamp() }, { merge:true });
+        guardarNome(c.user, nome);
       } catch (e) {
         if (e.code !== "auth/email-already-in-use") throw e;
         let c;
         try { c = await signInWithEmailAndPassword(auth, email, senha); }
         catch { cadastrando = null; throw Object.assign(new Error("senha"), { code: "app/senha-diferente" }); }
-        await setDoc(doc(db, "users", c.user.uid), { nome, telefone, email, criadoEm: serverTimestamp() }, { merge:true });
+        guardarNome(c.user, nome);
       }
     } else {
       await signInWithEmailAndPassword(auth, email, senha);
@@ -130,7 +133,7 @@ onAuthStateChanged(auth, async user => {
   } catch {}
   if (cadastrando) {
     const p = cadastrando; cadastrando = null;
-    try { await setDoc(doc(db,"users",user.uid), { ...p, criadoEm: serverTimestamp() }, { merge:true }); } catch {}
+    guardarNome(user, p.nome);
   }
   iniciarCliente(user); tela("cliente");
 });
@@ -160,7 +163,7 @@ function textoStatus(c){
 }
 function iniciarCliente(user){
   unsubs.push(onSnapshot(doc(db,"solicitacoes",user.uid), d => { solicitacao = d.exists() ? d.data() : null; atualizarParceiro(); }, () => {}));
-  getDoc(doc(db,"users",user.uid)).then(s => { $("ola").textContent = s.exists() ? "Olá, " + s.data().nome.split(" ")[0] + "!" : "Olá!"; }).catch(()=>{});
+  { const nm = nomeDe(user); $("ola").textContent = nm ? "Olá, " + nm.split(" ")[0] + "!" : "Olá!"; }
   let ativo = null, online = null;
   const atualizarBotao = () => {
     $("bloco-chamar").classList.toggle("hidden", !!ativo || online !== true || !!notaId);
@@ -207,17 +210,13 @@ function iniciarCliente(user){
     navigator.geolocation.getCurrentPosition(async pos => {
       if (!dentro(pos.coords.latitude, pos.coords.longitude)) { btn.disabled = false; alert("O LZ EXPRESS atende somente em Cametá (PA)."); return; }
       try {
-        const s = await getDoc(doc(db,"users",user.uid));
-        let u;
-        if (s.exists()) u = s.data();
-        else {
-          const nome = (prompt("Digite seu nome:") || "").trim();
-          const telefone = (prompt("Digite seu telefone (WhatsApp):") || "").trim();
-          if (!nome || !telefone) { btn.disabled = false; return; }
-          u = { nome, telefone, email: user.email };
-          await setDoc(doc(db,"users",user.uid), { ...u, criadoEm: serverTimestamp() }, { merge:true });
-          $("ola").textContent = "Olá, " + nome.split(" ")[0] + "!";
+        let nomeP = nomeDe(user);
+        if (!nomeP) {
+          nomeP = (prompt("Digite seu nome:") || "").trim();
+          if (!nomeP) { btn.disabled = false; return; }
+          guardarNome(user, nomeP); $("ola").textContent = "Olá, " + nomeP.split(" ")[0] + "!";
         }
+        const u = { nome:nomeP };
         const ch = doc(collection(db,"chamados")), lote = writeBatch(db);
         lote.set(ch, {
           uid:user.uid, nome:u.nome, referencia:$("referencia").value.trim().slice(0,120),
@@ -225,7 +224,6 @@ function iniciarCliente(user){
           lat:pos.coords.latitude, lng:pos.coords.longitude, precisao:Math.round(pos.coords.accuracy),
           status:"aguardando", criadoEm:serverTimestamp()
         });
-        lote.set(doc(db,"contatos",ch.id), { uid:user.uid, telefone:u.telefone });
         lote.set(doc(db,"users",user.uid), { ultimoChamado:serverTimestamp() }, { merge:true });
         await lote.commit();
         avisarMotorista((u.nome||"Cliente").split(" ")[0]);
@@ -257,7 +255,7 @@ const fmt = (t, soHora) => !t ? "agora" : new Date(t.seconds*1000).toLocaleStrin
 const MOT_TXT = {nao_encontrado:"cliente não encontrado", fora_area:"fora da área", sem_resposta:"sem resposta", indisponivel:"sem moto disponível", problema_moto:"problema com a moto", duplicado:"duplicado", desistiu:"cliente desistiu"};
 const NOMES = {aguardando:"Aguardando",aceito:"Em andamento",finalizado:"Finalizada",cancelado:"Cancelada"};
 function abaMot(qual){
-  [["ativos","aba-ativos","lista"],["hist","aba-hist","hist"],["clientes","aba-clientes","clientes"],["motoristas","aba-motoristas","motoristas"]].forEach(([n,aba,box]) => {
+  [["ativos","aba-ativos","lista"],["hist","aba-hist","hist"],["motoristas","aba-motoristas","motoristas"]].forEach(([n,aba,box]) => {
     $(aba).classList.toggle("ativa", n === qual); $(box).classList.toggle("hidden", n !== qual);
   });
 }
@@ -314,18 +312,18 @@ function iniciarPainel(user, admin, perfil){
     zap: (admin ? MOTORISTA_ZAP : perfil.telefone) || "",
     pix: admin ? PIX_PAYLOAD : montarPix(perfil.pixChave || "", perfil.nome),
     pixNome: admin ? "Leandro Vanzeler Vasconcelos · Mercado Pago" : perfil.nome };
-  ["aba-clientes","aba-motoristas"].forEach(i => $(i).classList.toggle("hidden", !admin));
+  ["aba-motoristas"].forEach(i => $(i).classList.toggle("hidden", !admin));
   $("btn-apagar").classList.add("hidden");
   $("aba-ativos").classList.toggle("hidden", admin);
   $("aba-hist").classList.toggle("hidden", admin);
   $("plano-card").classList.toggle("hidden", admin);
   $("plano-adm").classList.toggle("hidden", !admin);
   $("btn-online").classList.toggle("hidden", expirado || admin);
-  document.querySelector("#motorista .abas").classList.toggle("hidden", expirado);
+  document.querySelector("#motorista .abas").classList.toggle("hidden", expirado || admin);
   if (admin) setDoc(doc(db,"disponibilidade",user.uid), { online:false }, { merge:true }).catch(() => {});
   abaMot(admin ? "motoristas" : "ativos"); desenharPlano(); atualizarPlanoUI();
   if (expirado) { $("lista").innerHTML = `<p class="vazio">Seu plano venceu. Toque em “Pagar mensalidade” para voltar a receber chamados.</p>`; return; }
-  let online = false, histL = [], ocupado = false, todosItens = [], desenharMot = null, acumMeu = { soma:0, total:0 }, posAtual = null, dispOcup = false, visVistos = new Set(), visInit = false, lastSig = "";
+  let online = false, histL = [], ocupado = false, todosItens = [], desenharMot = null, acumMeu = { soma:0, total:0 }, contMeu = {}, posAtual = null, dispOcup = false, visVistos = new Set(), visInit = false, lastSig = "";
   const primeira = {}, fontes = {};
   const recusados = new Set((() => { try { return JSON.parse(localStorage.getItem("lz_rec") || "[]"); } catch { return []; } })());
   const btn = $("btn-online");
@@ -365,26 +363,26 @@ function iniciarPainel(user, admin, perfil){
       if (ve && !(c.id in fones)) carregarFone(c, render);
       const fone = ve ? fones[c.id] : null, zap = String(fone || "").replace(/\D/g,"");
       return `<div class="chamado ${esp?"":"aceito"}"><h3>${esc(c.nome)}</h3>
-        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} · precisão ~${c.precisao ?? "?"} m${distTxt(c)}<br>${esp ? "" : "Atendendo: " + esc(c.motoristaNome || "?") + "<br>"}${ve ? (fone ? esc(fone) : (fone === null ? "carregando telefone..." : "")) : (esp ? "Contato pelo chat do app após aceitar" : "")}</div>
+        <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} ${distTxt(c)}<br>${esp ? "" : "Atendendo: " + esc(c.motoristaNome || "?") + "<br>"}${ve ? (fone ? esc(fone) : (fone === null ? "carregando telefone..." : "")) : (esp ? "Contato pelo chat do app após aceitar" : "")}</div>
         ${c.referencia ? `<div class="ref">Referência: ${esc(c.referencia)}</div>` : ""}
         ${c.destino ? `<div class="ref">Destino: ${esc(c.destino)}</div>` : ""}
         ${c.valor > 0 ? `<div class="ref">Valor oferecido: ${brl(c.valor)}</div>` : ""}
         ${c.distKm > 0 ? `<div class="ref">Corrida de ${String(c.distKm).replace(".", ",")} km (~${c.duracaoMin} min) · estimativa ${brl(c.estimativa)}</div>` : ""}
         <div class="acoes">
-          ${c.iniciada && (c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${destUrl(c)}">Navegar até o destino</a>` : `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Rota até o passageiro</a>`}
+          ${c.iniciada && (c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${destUrl(c)}">Trajeto até o destino</a>` : `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Rota até o passageiro</a>`}
           ${esp && (c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&origin=${c.lat},${c.lng}&destination=${destUrl(c)}">Ver trajeto da corrida</a>` : ""}
           ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
-          ${esp ? (ocupado || admin ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : (c.iniciada ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>` : `<button class="b-ok" data-a="iniciar" data-id="${c.id}">Cheguei · iniciar corrida</button>`)}
+          ${esp ? (ocupado || admin ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : (c.iniciada ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>` : `<button class="b-ok" data-a="iniciar" data-id="${c.id}">Iniciar corrida</button>`)}
           ${esp && !admin ? `<button class="b-cancel" data-rec="${c.id}">Recusar</button>` : ""}
           ${!esp && meu ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
         </div></div>`;
     }).join("") : `<p class="vazio">${online ? "Nenhum chamado por enquanto." : "Você está offline. Toque no botão vermelho no topo para ficar online e receber chamados."}</p>`);
-    const hoje = new Date().toDateString();
-    const feitas = hist.filter(c => c.status === "finalizado" && c.criadoEm && new Date(c.criadoEm.seconds*1000).toDateString() === hoje).length;
-    let nota = "";
-    if (!admin) { const mine = itens.filter(c => c.motoristaId === EU.uid && c.nota && !c.contado); nota = " · Minha nota: " + mediaTxt(mine.reduce((a,c) => a + c.nota, 0) + (acumMeu.soma || 0), mine.length + (acumMeu.total || 0)); }
-    $("resumo").textContent = `Corridas finalizadas hoje: ${feitas} · No histórico: ${hist.length}${nota}`;
+    const hojeS = new Date().toLocaleDateString("sv-SE"), diasMeu = contMeu.dias || {};
+    const diaN = diasMeu[hojeS] || 0, mesN = Object.entries(diasMeu).filter(([d]) => d.startsWith(hojeS.slice(0,7))).reduce((x,[,v]) => x + v, 0);
+    let notaT = "sem avaliações";
+    if (!admin) { const mine = itens.filter(c => c.motoristaId === EU.uid && c.nota && !c.contado); notaT = mediaTxt(mine.reduce((a,c) => a + c.nota, 0) + (acumMeu.soma || 0), mine.length + (acumMeu.total || 0)); }
+    $("resumo").innerHTML = `Corridas diárias: <b>${diaN}</b><br>Histórico mensal: <b>${mesN}</b><br>Avaliações: <b>${notaT}</b>`;
     $("lista-hist").innerHTML = hist.length ? hist.map(c => {
       const meu = !admin && c.motoristaId === EU.uid;
       return `<div class="chamado ${c.status==="finalizado"?"aceito":"fim"}"><h3>${esc(c.nome)}</h3>
@@ -412,6 +410,7 @@ function iniciarPainel(user, admin, perfil){
   else {
     ouvir("espera", query(col, where("status","==","aguardando"))); ouvir("meus", query(col, where("motoristaId","==",user.uid)));
     unsubs.push(onSnapshot(doc(db,"avaliacoes",user.uid), d => { acumMeu = d.exists() ? d.data() : { soma:0, total:0 }; render(); }, () => {}));
+    unsubs.push(onSnapshot(doc(db,"contagem",user.uid), d => { contMeu = d.exists() ? d.data() : {}; render(); }, () => {}));
   }
   if (!admin) unsubs.push(onSnapshot(doc(db,"disponibilidade",user.uid), d => {
     online = d.exists() && d.data().online === true; dispOcup = d.exists() && d.data().ocupado === true;
@@ -443,7 +442,6 @@ function iniciarPainel(user, admin, perfil){
     } catch {}
   };
   limparAntigos();
-  $("aba-clientes").onclick = () => abaMot("clientes");
   $("aba-motoristas").onclick = () => abaMot("motoristas");
   const alterna = (boxId, btnId) => { const oculto = $(boxId).classList.toggle("hidden"); $(btnId).classList.toggle("sel", !oculto); };
   $("btn-mostrar-form").onclick = () => alterna("form-mot", "btn-mostrar-form");
@@ -471,29 +469,6 @@ function iniciarPainel(user, admin, perfil){
     const valor = parseFloat(String(prompt("Valor da mensalidade (R$):", PLANO.valor)).replace(",", ".")); if (!(valor > 0)) return;
     setDoc(doc(db,"config","plano"), { dias, valor }).catch(() => alert("Não foi possível salvar."));
   };
-
-  let clientes = [];
-  const mostrarClientes = () => {
-    const q = $("busca-cliente").value.trim().toLowerCase();
-    const lista = clientes.filter(c => !q || (c.nome||"").toLowerCase().includes(q) || (c.telefone||"").includes(q));
-    $("lista-clientes").innerHTML = lista.length ? lista.map(c => {
-      const fone = (c.telefone||"").replace(/\D/g,"");
-      return `<div class="chamado aceito"><h3>${esc(c.nome)}</h3><div class="info">${esc(c.telefone)}</div>
-        <div class="acoes"><a class="b-zap" target="_blank" href="https://wa.me/55${fone}">WhatsApp</a>
-        <button class="b-cancel" data-del="${c.id}" data-nome="${esc(c.nome)}" type="button">Apagar</button></div></div>`;
-    }).join("") : `<p class="vazio">Nenhum cliente encontrado.</p>`;
-  };
-  $("busca-cliente").oninput = mostrarClientes;
-  $("lista-clientes").onclick = e => {
-    const b = e.target.closest("[data-del]"); if (!b) return;
-    if (!confirm("Apagar " + b.dataset.nome + " dos contatos? O login dela continua existindo; no próximo chamado o app pedirá nome e telefone de novo.")) return;
-    deleteDoc(doc(db,"users",b.dataset.del)).catch(() => alert("Não foi possível apagar. Tente de novo."));
-  };
-  unsubs.push(onSnapshot(collection(db,"users"), snap => {
-    clientes = snap.docs.map(d => ({id:d.id, ...d.data()})).filter(c => (c.email||"").toLowerCase() !== ADMIN_EMAIL.toLowerCase())
-      .sort((a,b) => (a.nome||"").localeCompare(b.nome||"","pt-BR"));
-    mostrarClientes();
-  }, () => {}));
 
   let sols = [];
   const desenharSol = () => {
@@ -526,7 +501,7 @@ function iniciarPainel(user, admin, perfil){
     $("btn-mostrar-lista").textContent = "Ver motoristas cadastrados (" + mots.length + ")";
     const mes = new Date().toLocaleDateString("sv-SE").slice(0,7), dia = new Date().toLocaleDateString("sv-SE");
     const onl = mots.filter(m => disp[m.id] && disp[m.id].online), emCorrida = onl.filter(m => disp[m.id].ocupado).length, aguard = todosItens.filter(z => z.status === "aguardando").length;
-    const resumoMot = `<div class="resumo">${onl.length} online · ${onl.length - emCorrida} livre(s) · ${emCorrida} em corrida · ${aguard} chamado(s) aguardando</div>`;
+    const resumoMot = `<div class="resumo">Motoristas online: <b>${onl.length}</b><br>Motoristas livres: <b>${onl.length - emCorrida}</b><br>Motoristas em rota: <b>${emCorrida}</b><br>Chamados aguardando: <b>${aguard}</b></div>`;
     $("lista-motoristas").innerHTML = resumoMot + (mots.length ? mots.map(m => {
       const c = cont[m.id] || {}, dias = c.dias || {};
       const noMes = Object.entries(dias).filter(([d]) => d.startsWith(mes)).reduce((x,[,v]) => x + v, 0);
@@ -541,11 +516,10 @@ function iniciarPainel(user, admin, perfil){
         <div class="acoes">
           ${dsp.ocupado ? `<button class="b-esp" data-mot="liberar" data-id="${m.id}" style="grid-column:1/3">Liberar motorista (marcar como livre)</button>` : ""}
           <button class="b-ok" data-mot="pagou" data-id="${m.id}" style="grid-column:1/3">Registrar pagamento (+30 dias)</button>
-          <button class="b-mapa" data-mot="dias" data-id="${m.id}">Dar dias</button>
           <button class="${m.ativo?"b-cancel":"b-ok"}" data-mot="alt" data-id="${m.id}">${m.ativo ? "Desativar" : "Ativar"}</button>
           <button class="b-mapa" data-mot="senha" data-id="${m.id}">Nova senha</button>
           <button class="b-waze" data-mot="pix" data-id="${m.id}">Editar Pix</button>
-          <button class="b-fim" data-mot="qr" data-id="${m.id}" style="grid-column:1/3">Ver QR Pix</button>
+          <button class="b-fim" data-mot="qr" data-id="${m.id}">Ver QR Pix</button>
           ${!m.ativo ? `<button class="b-cancel" data-mot="apagar" data-id="${m.id}" style="grid-column:1/3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:8px"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>Apagar cadastro</button>` : ""}
         </div></div>`;
     }).join("") : `<p class="vazio">Nenhum motorista cadastrado.</p>`);
@@ -565,9 +539,6 @@ function iniciarPainel(user, admin, perfil){
         if (m.ativo) await setDoc(doc(db,"disponibilidade",m.id), { online:false }, { merge:true });
       } else if (b.dataset.mot === "pagou") {
         if (confirm("O pagamento de " + m.nome + " caiu no seu banco? Isso libera mais 30 dias.")) await updateDoc(doc(db,"motoristas",m.id), { validoAte: Timestamp.fromMillis(base + 30 * 86400000), ultimoPagamento: serverTimestamp() });
-      } else if (b.dataset.mot === "dias") {
-        const n = parseInt(prompt("Quantos dias dar para " + m.nome + "?", "7"), 10);
-        if (n > 0) await updateDoc(doc(db,"motoristas",m.id), { validoAte: Timestamp.fromMillis(base + n * 86400000) });
       } else if (b.dataset.mot === "apagar") {
         if (m.ativo) { alert("Desative o motorista antes de apagar o cadastro."); return; }
         if (!confirm("Apagar de vez o cadastro de " + m.nome + "? Isso remove o nome, o Pix, as notas e a contagem de corridas dele. Não dá para desfazer.")) return;
@@ -714,15 +685,16 @@ function atualizarParceiro(){
   $("parc-form").classList.toggle("hidden", travado);
   $("parc-estado").textContent = st === "pendente" ? "Solicitação enviada! O administrador vai entrar em contato pelo WhatsApp." : st === "aprovada" ? "Você foi aprovado! Feche e abra o app para ver o painel de motorista." : st === "recusada" ? "Sua solicitação anterior não foi aprovada. Você pode enviar de novo." : "";
 }
-$("btn-trabalhe").onclick = () => $("parceiro-tela").classList.remove("hidden");
+$("btn-trabalhe").onclick = () => { if (!$("parc-nome").value && auth.currentUser) $("parc-nome").value = nomeDe(auth.currentUser); $("parceiro-tela").classList.remove("hidden"); };
 $("parc-fechar").onclick = () => $("parceiro-tela").classList.add("hidden");
 $("parc-aceite").onchange = () => { $("parc-enviar").disabled = !$("parc-aceite").checked; };
 $("parc-enviar").onclick = async () => {
   const u = auth.currentUser; if (!u || !$("parc-aceite").checked) return;
   $("parc-enviar").disabled = true;
   try {
-    const d = (await getDoc(doc(db,"users",u.uid))).data() || {};
-    await setDoc(doc(db,"solicitacoes",u.uid), { nome:d.nome || "", telefone:d.telefone || "", email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"1.0", criadoEm:serverTimestamp() });
+    const nomeS = $("parc-nome").value.trim(), foneS = $("parc-fone").value.trim();
+    if (!nomeS || foneS.replace(/\D/g,"").length < 10) { alert("Preencha seu nome e seu WhatsApp com DDD."); $("parc-enviar").disabled = false; return; }
+    await setDoc(doc(db,"solicitacoes",u.uid), { nome:nomeS, telefone:foneS, email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"1.0", criadoEm:serverTimestamp() });
     $("parc-aceite").checked = false;
   } catch { alert("Não foi possível enviar. Tente de novo."); }
   $("parc-enviar").disabled = !$("parc-aceite").checked;

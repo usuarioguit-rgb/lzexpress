@@ -260,3 +260,9 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .lz-tip::before{display:none}
 .zoom-baixo .lz-tip{display:none}
 #mapa-locais{height:260px;border-radius:14px;overflow:hidden;margin:6px 0 10px;background:#0f2347}
+
+.resumo b{color:#f6d57a}
+#motorista .resumo{line-height:1.7}
+.parc label{color:#d6e0f2;font-size:14px;margin:8px 0 5px}
+.parc input:not([type=checkbox]){background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);color:#f5f7fb;border-radius:12px;padding:12px 14px;font-size:16px}
+.parc .aceite{margin-top:12px}

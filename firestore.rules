@@ -47,7 +47,8 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || admin());
       allow create: if request.auth != null && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['nome','telefone','email','criadoEm'])
+        && request.resource.data.keys().hasOnly(['nome','telefone','email','criadoEm','ultimoChamado'])
+        && request.resource.data.get("ultimoChamado", request.time) == request.time
         && request.resource.data.get("nome", "").size() <= 80
         && request.resource.data.get("telefone", "").size() <= 25;
       allow update: if request.auth != null && request.auth.uid == uid
@@ -101,7 +102,9 @@ service cloud.firestore {
         && request.resource.data.lat >= -2.45 && request.resource.data.lat <= -2.05
         && request.resource.data.lng >= -49.70 && request.resource.data.lng <= -49.30
         && request.resource.data.lng is number
-        && request.time > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("ultimoChamado", timestamp.value(0)) + duration.value(60, "s");
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            || request.time > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("ultimoChamado", timestamp.value(0)) + duration.value(60, "s"))
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("ultimoChamado", null) == request.time;
       allow read: if request.auth != null && (admin() || resource.data.uid == request.auth.uid
         || (ehMotorista() && (resource.data.status == "aguardando" || resource.data.motoristaId == request.auth.uid)));
       allow update: if request.auth != null && (admin()

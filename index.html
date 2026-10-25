@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 
@@ -49,7 +49,6 @@
     </div>
     <div id="campos-cadastro" class="hidden">
       <label>Seu nome</label><input id="nome" autocomplete="name" placeholder="Ex.: Maria Silva">
-      <label>Telefone (WhatsApp)</label><input id="telefone" type="tel" autocomplete="tel" placeholder="(91) 99999-9999">
     </div>
     <label>E-mail</label><input id="email" type="email" autocomplete="email" placeholder="seuemail@gmail.com">
     <label>Senha</label><div class="senha-wrap"><input id="senha" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres"><button id="ver-senha" class="olho" type="button">Mostrar</button></div>
@@ -68,11 +67,11 @@
     <p class="sub">Precisa de uma moto? É só chamar.</p>
     <div id="aviso-offline" class="aviso hidden">🔴 O moto táxi está <b>offline</b> no momento. Tente de novo mais tarde.</div>
     <div id="bloco-chamar">
-      <label for="referencia">Ponto de referência (opcional)</label>
+      <label for="referencia">Digite seu ponto de referência</label>
       <div class="campo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><input id="referencia" maxlength="120" placeholder="Ex.: em frente à padaria, portão azul"></div>
-      <label for="destino">Para onde vamos? (opcional)</label>
+      <label for="destino">Para onde vamos?</label>
       <div class="campo"><input id="destino" maxlength="100" placeholder="Ex.: Mix Mateus"></div>
-      <label for="valor">Negociar o valor (opcional)</label>
+      <label for="valor">Negociar o valor</label>
       <div class="campo"><span style="color:#f2c25b;font-weight:700">R$</span><input id="valor" inputmode="decimal" maxlength="7" placeholder="Ex.: 10"></div>
       <button id="btn-chamar" class="chamar" type="button"><span class="t">CHAMAR MOTO TÁXI</span><span class="s">Toque e um motorista vai até você</span></button>
     </div>
@@ -96,7 +95,7 @@
     <button id="btn-online" class="toggle off" type="button">Carregando...</button>
     <div id="plano-card" class="plano hidden"><div><b id="plano-tit"></b><small id="plano-sub"></small></div><button id="btn-pagar" type="button">Pagar mensalidade</button></div>
     <button class="btn neutro mini" data-share type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4M8.6 13.3l6.8 4"/></svg>Compartilhar o app</button>
-    <div class="abas"><button id="aba-ativos" class="aba ativa" type="button">Chamados</button><button id="aba-hist" class="aba" type="button">Histórico</button><button id="aba-clientes" class="aba hidden" type="button">Clientes</button><button id="aba-motoristas" class="aba hidden" type="button">Motoristas</button></div>
+    <div class="abas"><button id="aba-ativos" class="aba ativa" type="button">Chamados</button><button id="aba-hist" class="aba" type="button">Histórico</button><button id="aba-motoristas" class="aba hidden" type="button">Motoristas</button></div>
     <div id="lista"></div>
     <div id="motoristas" class="hidden">
       <div class="menu-mot"><button id="btn-mostrar-form" type="button">Cadastrar motorista</button><button id="btn-mostrar-lista" type="button">Ver motoristas cadastrados</button><button id="btn-mostrar-sol" type="button">Solicitações de motoristas</button></div>
@@ -113,7 +112,6 @@
       <div id="lista-solicitacoes" class="hidden"></div>
       <div id="lista-motoristas" class="hidden"></div>
     </div>
-    <div id="clientes" class="hidden"><input id="busca-cliente" placeholder="Buscar por nome ou telefone"><div id="lista-clientes"></div></div>
     <div id="hist" class="hidden"><p id="resumo" class="resumo"></p>
     <button id="btn-apagar" class="btn secundario" type="button">Apagar histórico</button><p id="aviso-apagar" class="dica hidden"></p><div id="lista-hist"></div></div>
   </main>
@@ -138,6 +136,8 @@
 <p><b>11. Suspensão e saída.</b> O administrador pode suspender ou encerrar seu acesso se estes termos forem descumpridos. Você pode sair quando quiser, avisando o administrador. Não há reembolso proporcional da mensalidade já paga, salvo decisão do administrador.</p>
 <p><b>12. Responsabilidade.</b> O LZ EXPRESS não responde por acidentes, danos, multas ou conflitos ocorridos nas corridas.</p>
 <p><b>13. Mudanças e aceite.</b> Estes termos podem ser atualizados, e você será avisado. Ao marcar “Li e aceito”, você concorda com eles, e o app registra a data, a hora e a versão do aceite.</p></div>
+    <label>Seu nome</label><input id="parc-nome" maxlength="80" placeholder="Seu nome completo">
+    <label>Seu WhatsApp (com DDD)</label><input id="parc-fone" type="tel" maxlength="20" placeholder="(91) 99999-9999">
     <label class="aceite"><input type="checkbox" id="parc-aceite"> Li e aceito os Termos e Condições</label>
     <button id="parc-enviar" class="btn principal" type="button" disabled>Aceitar e continuar</button>
   </div>
@@ -184,6 +184,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=19"></script>
+<script type="module" src="app.js?v=20"></script>
 </body>
 </html>
