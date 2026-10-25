@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteDoc, runTransaction, increment, getDocs, Timestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteDoc, runTransaction, increment, getDocs, Timestamp, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { PIX_PAYLOAD, PIX_CHAVE } from "./pix.js";
 import { MOTORISTA_NOME, MOTORISTA_ZAP } from "./motorista.js";
 import * as cfg from "./config.js";
@@ -161,6 +161,7 @@ const MOTIVOS_CLIENTE = {
   desistiu:"Chamado encerrado a pedido do cliente."
 };
 function textoStatus(c){
+  if (c.status === "aguardando" && c.contra) return ["Proposta do motorista", (c.contra.motoristaNome || "O motorista") + " propôs " + brl(c.contra.valor) + " para esta corrida (você ofereceu " + (c.valor > 0 ? brl(c.valor) : "nenhum valor") + "). Você aceita?", ""];
   if (c.status === "aguardando" && dispPronto && onlineN === 0) return ["Nenhum motorista online","No momento não há motoristas online. Você pode cancelar e chamar de novo mais tarde.",""];
   if (c.status === "aguardando" && dispPronto && livresIds.length === 0) return ["Aguarde um pouquinho","Os moto táxis estão ocupados no momento. Aguarde um pouco, assim que um deles ficar livre você será atendido!",""];
   if (c.status === "aguardando" && dispPronto && livresIds.every(id => (c.recusas || []).includes(id))) return ["Sem motorista por enquanto","Os motoristas disponíveis não puderam atender agora. Você pode cancelar e chamar de novo em alguns instantes.",""];
@@ -190,6 +191,9 @@ function iniciarCliente(user){
     atualizarBotao();
     $("btn-cancelar").classList.toggle("hidden", !(ativo && ativo.status === "aguardando"));
     ultCli = ult || null;
+    $("contra-btns").classList.toggle("hidden", !(ult && ult.status === "aguardando" && ult.contra));
+    if (ult && ult.contra) $("btn-contra-ok").textContent = "Aceitar " + brl(ult.contra.valor);
+    limparAntigos(todos);
     const aceito = ult && ult.status === "aceito" ? ult : null;
     monitorarChat(aceito && !aceito.iniciada ? aceito.id : null);
     if (!ult) { $("status").classList.add("hidden"); return; }
@@ -345,12 +349,15 @@ function iniciarPainel(user, admin, perfil){
     const agora = Date.now() / 1000;
     const dist = c => posAtual ? km(posAtual.lat, posAtual.lng, c.lat, c.lng) : null;
     const atraso = c => { const d = dist(c); return d === null ? 45 : d <= 1 ? 0 : d <= 2 ? 15 : d <= 4 ? 30 : 45; };
-    const visivel = c => online && !recusados.has(c.id) && !(c.recusas || []).includes(EU.uid) && c.criadoEm && agora - c.criadoEm.seconds >= atraso(c);
+    const visivel = c => online && !recusados.has(c.id) && !(c.recusas || []).includes(EU.uid) && !(c.reserva && c.reserva.motoristaId !== EU.uid && c.reserva.ate && c.reserva.ate.toMillis() > Date.now()) && c.criadoEm && agora - c.criadoEm.seconds >= atraso(c);
     const distTxt = c => { const d = admin ? null : dist(c); return d === null ? "" : " · a " + (d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1).replace(".", ",") + " km") + " de você"; };
     const destUrl = c => c.destLat ? c.destLat + "," + c.destLng : encodeURIComponent(c.destino + ", Cametá, PA");
     const ativos = (admin ? [] : itens.filter(c => (c.status === "aguardando" && !ocupado && visivel(c)) || (c.status === "aceito" && c.motoristaId === EU.uid))).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
-    const hist = admin ? [] : itens.filter(c => !abertos(c)).sort((a,b) => seg(b)-seg(a));
+    const hojeStr = new Date().toLocaleDateString("sv-SE");
+    const eHoje = c => new Date(((c.finalizadoEm || c.criadoEm || { seconds:Date.now() / 1000 }).seconds) * 1000).toLocaleDateString("sv-SE") === hojeStr;
+    const hist = admin ? [] : itens.filter(c => !abertos(c) && eHoje(c)).sort((a,b) => seg(b)-seg(a));
     histL = hist; atualizarApagar();
+    if (!admin && fontes.meus !== undefined) limparAntigos(itens.filter(c => c.motoristaId === EU.uid));
     if (!admin && fontes.espera !== undefined) {
       const novos = ativos.filter(c => c.status === "aguardando" && !visVistos.has(c.id));
       if (visInit && novos.length) beep();
@@ -369,6 +376,8 @@ function iniciarPainel(user, admin, perfil){
         ${c.referencia ? `<div class="ref">Referência: ${esc(c.referencia)}</div>` : ""}
         ${c.destino ? `<div class="ref">Destino: ${esc(c.destino)}</div>` : ""}
         ${c.valor > 0 ? `<div class="ref">Valor oferecido: ${brl(c.valor)}</div>` : ""}
+        ${c.contra ? `<div class="ref">${c.contra.motoristaId === EU.uid ? "Sua proposta de " + brl(c.contra.valor) + " aguarda a resposta do passageiro" : "Outro motorista propôs " + brl(c.contra.valor) + ". Aguarde a resposta do passageiro"}</div>` : ""}
+        ${c.reserva && c.reserva.motoristaId === EU.uid && c.reserva.ate && c.reserva.ate.toMillis() > Date.now() ? `<div class="ref">O passageiro aceitou sua proposta de ${brl(c.valor)}. Toque em Aceitar para confirmar a corrida.</div>` : ""}
         ${c.distKm > 0 ? `<div class="ref">Corrida de ${String(c.distKm).replace(".", ",")} km (~${c.duracaoMin} min) · estimativa ${brl(c.estimativa)}</div>` : ""}
         <div class="acoes">
           ${c.iniciada && (c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${destUrl(c)}">Trajeto até o destino</a>` : `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Rota até o passageiro</a>`}
@@ -376,6 +385,7 @@ function iniciarPainel(user, admin, perfil){
           ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
           ${esp ? (ocupado || admin ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : (c.iniciada ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>` : `<button class="b-ok" data-a="iniciar" data-id="${c.id}">Iniciar corrida</button>`)}
           ${esp && !admin ? `<button class="b-cancel" data-rec="${c.id}">Recusar</button>` : ""}
+          ${esp && !admin && !ocupado && !c.contra && !(c.propostasDe || []).includes(EU.uid) ? `<button class="b-esp" data-prop="${c.id}" data-valor="${c.valor || 0}" style="grid-column:1/3">Propor outro valor</button>` : ""}
           ${!esp && meu && !c.iniciada ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
         </div></div>`;
@@ -577,6 +587,7 @@ function iniciarPainel(user, admin, perfil){
 }
 
 $("lista").addEventListener("click", e => {
+  const pr = e.target.closest("[data-prop]"); if (pr) { proporValor(pr.dataset.prop, Number(pr.dataset.valor)); return; }
   const rc = e.target.closest("[data-rec]"); if (rc) { recusarId(rc.dataset.rec); return; }
   const ch = e.target.closest("[data-chat]"); if (ch) { abrirChat(ch.dataset.chat, ch.dataset.nome); return; }
   const b = e.target.closest("button[data-id]"); if (!b) return;
@@ -705,6 +716,14 @@ $("btn-pagar").onclick = () => abrirPix("Leandro Vanzeler · Mercado Pago", mont
   "Pague " + brl(PLANO.valor) + " e avise o administrador. Ele libera seu acesso depois de conferir o pagamento.", zapLink("Paguei a mensalidade do LZ EXPRESS."));
 
 /* ---------- Avaliação e localização do motorista ---------- */
+$("btn-contra-ok").onclick = () => {
+  const c = ultCli; if (!c || !c.contra) return;
+  updateDoc(doc(db,"chamados",c.id), { contra:deleteField(), valor:c.contra.valor, reserva:{ motoristaId:c.contra.motoristaId, ate:Timestamp.fromMillis(Date.now() + 60000) } }).catch(() => alert("Não foi possível responder à proposta."));
+};
+$("btn-contra-no").onclick = () => {
+  const c = ultCli; if (!c) return;
+  updateDoc(doc(db,"chamados",c.id), { contra:deleteField() }).catch(() => alert("Não foi possível responder à proposta."));
+};
 $("estrelas").onclick = async e => {
   const b = e.target.closest("button[data-n]"); if (!b || !notaId) return;
   const id = notaId; notaId = null; $("nota-tela").classList.add("hidden"); atualizarBotaoGlobal();
@@ -750,6 +769,27 @@ function seguirGPS(id){
 const AREA = { sul:-2.45, norte:-2.05, oeste:-49.70, leste:-49.30 };
 const dentro = (lat, lng) => lat >= AREA.sul && lat <= AREA.norte && lng >= AREA.oeste && lng <= AREA.leste;
 let atualizarBotaoGlobal = () => {};
+
+/* ---------- Proposta de valor e limpeza diária ---------- */
+function proporValor(id, atual){
+  const v = parseFloat(String(prompt("Qual valor você propõe ao passageiro? (R$)", atual > 0 ? atual : "")).replace(",", "."));
+  if (!(v >= 1 && v <= 500) || !EU) return;
+  updateDoc(doc(db,"chamados",id), { contra:{ valor:Math.round(v * 100) / 100, motoristaId:EU.uid, motoristaNome:EU.nome, em:Date.now() }, propostasDe:arrayUnion(EU.uid) })
+    .then(() => alert("Proposta enviada! Aguarde a resposta do passageiro."))
+    .catch(() => alert("Não foi possível enviar a proposta."));
+}
+const limpando = new Set();
+async function limparAntigos(itens){
+  const ms = c => c.criadoEm ? c.criadoEm.seconds * 1000 : Date.now();
+  const velhos = itens.filter(c => ["finalizado","cancelado"].includes(c.status) && Date.now() - ms(c) > 86400000 && (!c.nota || c.contado) && !limpando.has(c.id)).slice(0, 15);
+  if (!velhos.length) return;
+  velhos.forEach(c => limpando.add(c.id));
+  try {
+    const refs = [];
+    for (const c of velhos) { refs.push(doc(db,"chamados",c.id)); (await getDocs(collection(db,"chamados",c.id,"mensagens"))).forEach(d => refs.push(d.ref)); }
+    const lote = writeBatch(db); refs.forEach(r => lote.delete(r)); await lote.commit();
+  } catch { velhos.forEach(c => limpando.delete(c.id)); }
+}
 
 /* ---------- PWA ---------- */
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");

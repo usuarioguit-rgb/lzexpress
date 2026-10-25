@@ -79,7 +79,7 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/chamados/$(id)).data.get("iniciada", false) == false
           && request.resource.data.de == request.auth.uid
           && request.resource.data.texto.size() <= 300;
-        allow delete: if admin();
+        allow delete: if request.auth != null && (admin() || parte());
       }
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['uid','nome','referencia','destino','valor','destLat','destLng','distKm','estimativa','duracaoMin','lat','lng','precisao','status','criadoEm'])
@@ -111,7 +111,8 @@ service cloud.firestore {
       allow update: if request.auth != null && (admin()
         || (ehMotorista() && resource.data.status == "aguardando"
             && request.resource.data.status == "aceito"
-            && request.resource.data.motoristaId == request.auth.uid)
+            && request.resource.data.motoristaId == request.auth.uid
+            && (!("reserva" in resource.data) || resource.data.reserva.motoristaId == request.auth.uid || resource.data.reserva.ate < request.time))
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid
             && request.resource.data.status == "finalizado")
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid && resource.data.status == "aceito"
@@ -120,13 +121,30 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['iniciada','iniciadaEm']))
         || (ehMotorista() && resource.data.status == "aguardando" && request.resource.data.status == "aguardando"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['recusas']))
+        || (ehMotorista() && resource.data.status == "aguardando" && request.resource.data.status == "aguardando"
+            && !("contra" in resource.data)
+            && !(request.auth.uid in resource.data.get("propostasDe", []))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contra','propostasDe'])
+            && request.resource.data.contra.motoristaId == request.auth.uid
+            && request.resource.data.contra.valor is number
+            && request.resource.data.contra.valor >= 1 && request.resource.data.contra.valor <= 500)
+        || (resource.data.uid == request.auth.uid && resource.data.status == "aguardando" && ("contra" in resource.data)
+            && !("contra" in request.resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contra','valor','reserva'])
+            && (request.resource.data.valor == resource.data.valor
+                || (request.resource.data.valor == resource.data.contra.valor
+                    && request.resource.data.reserva.motoristaId == resource.data.contra.motoristaId)))
         || (resource.data.uid == request.auth.uid && request.resource.data.status == "cancelado"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
         || (resource.data.uid == request.auth.uid && resource.data.status == "finalizado"
             && !('nota' in resource.data)
             && request.resource.data.nota in [1, 2, 3, 4, 5]
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nota'])));
-      allow delete: if admin() && resource.data.status in ["finalizado", "cancelado"];
+      allow delete: if request.auth != null && resource.data.status in ["finalizado", "cancelado"]
+        && (admin()
+            || ((resource.data.uid == request.auth.uid || resource.data.get("motoristaId", "") == request.auth.uid)
+                && resource.data.criadoEm < request.time - duration.value(1, "d")
+                && (!("nota" in resource.data) || resource.data.get("contado", false) == true)));
     }
   }
 }
