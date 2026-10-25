@@ -76,6 +76,7 @@ service cloud.firestore {
         allow read: if request.auth != null && (admin() || parte());
         allow create: if request.auth != null && parte()
           && get(/databases/$(database)/documents/chamados/$(id)).data.status == "aceito"
+          && get(/databases/$(database)/documents/chamados/$(id)).data.get("iniciada", false) == false
           && request.resource.data.de == request.auth.uid
           && request.resource.data.texto.size() <= 300;
         allow delete: if admin();
@@ -117,6 +118,8 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['motoristaPos']))
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid && resource.data.status == "aceito"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['iniciada','iniciadaEm']))
+        || (ehMotorista() && resource.data.status == "aguardando" && request.resource.data.status == "aguardando"
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['recusas']))
         || (resource.data.uid == request.auth.uid && request.resource.data.status == "cancelado"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
         || (resource.data.uid == request.auth.uid && resource.data.status == "finalizado"
