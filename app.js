@@ -193,7 +193,6 @@ function iniciarCliente(user){
     ultCli = ult || null;
     $("contra-btns").classList.toggle("hidden", !(ult && ult.status === "aguardando" && ult.contra));
     if (ult && ult.contra) $("btn-contra-ok").textContent = "Aceitar " + brl(ult.contra.valor);
-    limparAntigos(todos);
     const aceito = ult && ult.status === "aceito" ? ult : null;
     monitorarChat(aceito && !aceito.iniciada ? aceito.id : null);
     if (!ult) { $("status").classList.add("hidden"); return; }
@@ -349,7 +348,7 @@ function iniciarPainel(user, admin, perfil){
     const agora = Date.now() / 1000;
     const dist = c => posAtual ? km(posAtual.lat, posAtual.lng, c.lat, c.lng) : null;
     const atraso = c => { const d = dist(c); return d === null ? 45 : d <= 1 ? 0 : d <= 2 ? 15 : d <= 4 ? 30 : 45; };
-    const visivel = c => online && !recusados.has(c.id) && !(c.recusas || []).includes(EU.uid) && !(c.reserva && c.reserva.motoristaId !== EU.uid && c.reserva.ate && c.reserva.ate.toMillis() > Date.now()) && c.criadoEm && agora - c.criadoEm.seconds >= atraso(c);
+    const visivel = c => online && !recusados.has(c.id) && !(c.recusas || []).includes(EU.uid) && c.criadoEm && agora - c.criadoEm.seconds >= atraso(c);
     const distTxt = c => { const d = admin ? null : dist(c); return d === null ? "" : " · a " + (d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1).replace(".", ",") + " km") + " de você"; };
     const destUrl = c => c.destLat ? c.destLat + "," + c.destLng : encodeURIComponent(c.destino + ", Cametá, PA");
     const ativos = (admin ? [] : itens.filter(c => (c.status === "aguardando" && !ocupado && visivel(c)) || (c.status === "aceito" && c.motoristaId === EU.uid))).sort((a,b) => (a.status==="aceito"?0:1)-(b.status==="aceito"?0:1) || seg(a)-seg(b));
@@ -377,7 +376,6 @@ function iniciarPainel(user, admin, perfil){
         ${c.destino ? `<div class="ref">Destino: ${esc(c.destino)}</div>` : ""}
         ${c.valor > 0 ? `<div class="ref">Valor oferecido: ${brl(c.valor)}</div>` : ""}
         ${c.contra ? `<div class="ref">${c.contra.motoristaId === EU.uid ? "Sua proposta de " + brl(c.contra.valor) + " aguarda a resposta do passageiro" : "Outro motorista propôs " + brl(c.contra.valor) + ". Aguarde a resposta do passageiro"}</div>` : ""}
-        ${c.reserva && c.reserva.motoristaId === EU.uid && c.reserva.ate && c.reserva.ate.toMillis() > Date.now() ? `<div class="ref">O passageiro aceitou sua proposta de ${brl(c.valor)}. Toque em Aceitar para confirmar a corrida.</div>` : ""}
         ${c.distKm > 0 ? `<div class="ref">Corrida de ${String(c.distKm).replace(".", ",")} km (~${c.duracaoMin} min) · estimativa ${brl(c.estimativa)}</div>` : ""}
         <div class="acoes">
           ${c.iniciada && (c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${destUrl(c)}">Trajeto até o destino</a>` : `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Rota até o passageiro</a>`}
@@ -435,25 +433,6 @@ function iniciarPainel(user, admin, perfil){
   $("aba-hist").onclick = () => abaMot("hist");
   if (!admin) return;
 
-  const limparAntigos = async () => {
-    try {
-      const lim = Timestamp.fromMillis(Date.now() - 3 * 86400000);
-      const snap = await getDocs(query(collection(db,"chamados"), where("criadoEm","<",lim), limit(40)));
-      const velhos = snap.docs.filter(d => ["finalizado","cancelado"].includes(d.data().status));
-      for (let i = 0; i < velhos.length; i += 10) {
-        const lote = writeBatch(db), por = {};
-        for (const d of velhos.slice(i, i + 10)) {
-          const c = d.data();
-          if (c.nota && c.motoristaId) { const a2 = por[c.motoristaId] || (por[c.motoristaId] = { soma:0, total:0 }); a2.soma += c.nota; a2.total++; }
-          lote.delete(d.ref); lote.delete(doc(db,"contatos",d.id));
-          (await getDocs(collection(db,"chamados",d.id,"mensagens"))).forEach(m => lote.delete(m.ref));
-        }
-        for (const [mid, a2] of Object.entries(por)) lote.set(doc(db,"avaliacoes",mid), { soma:increment(a2.soma), total:increment(a2.total) }, { merge:true });
-        await lote.commit();
-      }
-    } catch {}
-  };
-  limparAntigos();
   $("aba-motoristas").onclick = () => abaMot("motoristas");
   const alterna = (boxId, btnId) => { const oculto = $(boxId).classList.toggle("hidden"); $(btnId).classList.toggle("sel", !oculto); };
   $("btn-mostrar-form").onclick = () => alterna("form-mot", "btn-mostrar-form");
@@ -718,7 +697,7 @@ $("btn-pagar").onclick = () => abrirPix("Leandro Vanzeler · Mercado Pago", mont
 /* ---------- Avaliação e localização do motorista ---------- */
 $("btn-contra-ok").onclick = () => {
   const c = ultCli; if (!c || !c.contra) return;
-  updateDoc(doc(db,"chamados",c.id), { contra:deleteField(), valor:c.contra.valor, reserva:{ motoristaId:c.contra.motoristaId, ate:Timestamp.fromMillis(Date.now() + 60000) } }).catch(() => alert("Não foi possível responder à proposta."));
+  updateDoc(doc(db,"chamados",c.id), { contra:deleteField(), valor:c.contra.valor }).catch(() => alert("Não foi possível responder à proposta."));
 };
 $("btn-contra-no").onclick = () => {
   const c = ultCli; if (!c) return;

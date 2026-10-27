@@ -112,7 +112,7 @@ service cloud.firestore {
         || (ehMotorista() && resource.data.status == "aguardando"
             && request.resource.data.status == "aceito"
             && request.resource.data.motoristaId == request.auth.uid
-            && (!("reserva" in resource.data) || resource.data.reserva.motoristaId == request.auth.uid || resource.data.reserva.ate < request.time))
+           )
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid
             && request.resource.data.status == "finalizado")
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid && resource.data.status == "aceito"
@@ -130,10 +130,9 @@ service cloud.firestore {
             && request.resource.data.contra.valor >= 1 && request.resource.data.contra.valor <= 500)
         || (resource.data.uid == request.auth.uid && resource.data.status == "aguardando" && ("contra" in resource.data)
             && !("contra" in request.resource.data)
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contra','valor','reserva'])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contra','valor'])
             && (request.resource.data.valor == resource.data.valor
-                || (request.resource.data.valor == resource.data.contra.valor
-                    && request.resource.data.reserva.motoristaId == resource.data.contra.motoristaId)))
+                || request.resource.data.valor == resource.data.contra.valor))
         || (resource.data.uid == request.auth.uid && request.resource.data.status == "cancelado"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
         || (resource.data.uid == request.auth.uid && resource.data.status == "finalizado"
