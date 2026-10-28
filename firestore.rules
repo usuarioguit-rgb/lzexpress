@@ -67,6 +67,20 @@ service cloud.firestore {
       allow read: if request.auth != null && (admin() || resource.data.uid == request.auth.uid);
       allow delete: if admin();
     }
+    match /propostas/{cid} {
+      function propostaOk() {
+        return request.auth != null && ehMotorista()
+          && request.resource.data.keys().hasOnly(['valor','motoristaId','motoristaNome','passageiroUid','expiraEm','criadoEm'])
+          && request.resource.data.motoristaId == request.auth.uid
+          && request.resource.data.valor is number && request.resource.data.valor >= 1 && request.resource.data.valor <= 500
+          && request.resource.data.passageiroUid == get(/databases/$(database)/documents/chamados/$(cid)).data.uid
+          && get(/databases/$(database)/documents/chamados/$(cid)).data.status == "aguardando";
+      }
+      allow read: if request.auth != null && (resource == null || admin() || resource.data.passageiroUid == request.auth.uid || resource.data.motoristaId == request.auth.uid);
+      allow create: if propostaOk();
+      allow update: if propostaOk() && resource.data.expiraEm < request.time.toMillis();
+      allow delete: if request.auth != null && (admin() || resource.data.passageiroUid == request.auth.uid || resource.data.motoristaId == request.auth.uid);
+    }
     match /chamados/{id} {
       match /mensagens/{mid} {
         function parte() {
@@ -112,7 +126,7 @@ service cloud.firestore {
         || (ehMotorista() && resource.data.status == "aguardando"
             && request.resource.data.status == "aceito"
             && request.resource.data.motoristaId == request.auth.uid
-           )
+            && resource.data.get("negociando", 0) <= request.time.toMillis())
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid
             && request.resource.data.status == "finalizado")
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid && resource.data.status == "aceito"
@@ -122,17 +136,26 @@ service cloud.firestore {
         || (ehMotorista() && resource.data.status == "aguardando" && request.resource.data.status == "aguardando"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['recusas']))
         || (ehMotorista() && resource.data.status == "aguardando" && request.resource.data.status == "aguardando"
-            && !("contra" in resource.data)
+            && resource.data.get("negociando", 0) <= request.time.toMillis()
             && !(request.auth.uid in resource.data.get("propostasDe", []))
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contra','propostasDe'])
-            && request.resource.data.contra.motoristaId == request.auth.uid
-            && request.resource.data.contra.valor is number
-            && request.resource.data.contra.valor >= 1 && request.resource.data.contra.valor <= 500)
-        || (resource.data.uid == request.auth.uid && resource.data.status == "aguardando" && ("contra" in resource.data)
-            && !("contra" in request.resource.data)
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contra','valor'])
-            && (request.resource.data.valor == resource.data.valor
-                || request.resource.data.valor == resource.data.contra.valor))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['negociando','negociandoPor','propostasDe'])
+            && request.resource.data.negociandoPor == request.auth.uid
+            && request.resource.data.negociando > request.time.toMillis()
+            && request.resource.data.negociando <= request.time.toMillis() + 90000)
+        || (ehMotorista() && resource.data.motoristaId == request.auth.uid && resource.data.status == "aceito"
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contagemFeita']))
+        || (resource.data.uid == request.auth.uid && resource.data.status == "aguardando"
+            && exists(/databases/$(database)/documents/propostas/$(id))
+            && get(/databases/$(database)/documents/propostas/$(id)).data.passageiroUid == request.auth.uid
+            && get(/databases/$(database)/documents/propostas/$(id)).data.expiraEm > request.time.toMillis()
+            && request.resource.data.status == "aceito"
+            && request.resource.data.motoristaId == get(/databases/$(database)/documents/propostas/$(id)).data.motoristaId
+            && request.resource.data.valor == get(/databases/$(database)/documents/propostas/$(id)).data.valor
+            && get(/databases/$(database)/documents/disponibilidade/$(get(/databases/$(database)/documents/propostas/$(id)).data.motoristaId)).data.get("ocupado", false) == false
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','motoristaId','motoristaNome','valor','aceitoEm','viaProposta','negociando','negociandoPor']))
+        || (resource.data.uid == request.auth.uid && resource.data.status == "aguardando" && request.resource.data.status == "aguardando"
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['negociando','negociandoPor'])
+            && !("negociando" in request.resource.data) && !("negociandoPor" in request.resource.data))
         || (resource.data.uid == request.auth.uid && request.resource.data.status == "cancelado"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
         || (resource.data.uid == request.auth.uid && resource.data.status == "finalizado"

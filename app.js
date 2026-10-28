@@ -27,7 +27,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 
 let EU = null, cadastrando = null; const fones = {};
 let modoCadastro = false, unsubs = [], audioCtx = null;
-const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); seguirGPS(null); };
+const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); seguirGPS(null); monitorarProposta(null); };
 
 const perfilKey = uid => "lz_perfil_" + uid;
 function nomeDe(user){ try { return JSON.parse(localStorage.getItem(perfilKey(user.uid)) || "{}").nome || user.displayName || ""; } catch { return user.displayName || ""; } }
@@ -161,7 +161,7 @@ const MOTIVOS_CLIENTE = {
   desistiu:"Chamado encerrado a pedido do cliente."
 };
 function textoStatus(c){
-  if (c.status === "aguardando" && c.contra) return ["Proposta do motorista", (c.contra.motoristaNome || "O motorista") + " propôs " + brl(c.contra.valor) + " para esta corrida (você ofereceu " + (c.valor > 0 ? brl(c.valor) : "nenhum valor") + "). Você aceita?", ""];
+  if (c.status === "aguardando" && propostaAtiva()) return ["Proposta do motorista", (propostaAtual.motoristaNome || "O motorista") + " propôs " + brl(propostaAtual.valor) + " para esta corrida (você ofereceu " + (c.valor > 0 ? brl(c.valor) : "nenhum valor") + "). Se você aceitar, ele já vai até você. Você aceita?", ""];
   if (c.status === "aguardando" && dispPronto && onlineN === 0) return ["Nenhum motorista online","No momento não há motoristas online. Você pode cancelar e chamar de novo mais tarde.",""];
   if (c.status === "aguardando" && dispPronto && livresIds.length === 0) return ["Aguarde um pouquinho","Os moto táxis estão ocupados no momento. Aguarde um pouco, assim que um deles ficar livre você será atendido!",""];
   if (c.status === "aguardando" && dispPronto && livresIds.every(id => (c.recusas || []).includes(id))) return ["Sem motorista por enquanto","Os motoristas disponíveis não puderam atender agora. Você pode cancelar e chamar de novo em alguns instantes.",""];
@@ -191,8 +191,8 @@ function iniciarCliente(user){
     atualizarBotao();
     $("btn-cancelar").classList.toggle("hidden", !(ativo && ativo.status === "aguardando"));
     ultCli = ult || null;
-    $("contra-btns").classList.toggle("hidden", !(ult && ult.status === "aguardando" && ult.contra));
-    if (ult && ult.contra) $("btn-contra-ok").textContent = "Aceitar " + brl(ult.contra.valor);
+    monitorarProposta(ult && ult.status === "aguardando" ? ult.id : null);
+    atualizarContraUI();
     const aceito = ult && ult.status === "aceito" ? ult : null;
     monitorarChat(aceito && !aceito.iniciada ? aceito.id : null);
     if (!ult) { $("status").classList.add("hidden"); return; }
@@ -213,7 +213,7 @@ function iniciarCliente(user){
     atualizarBotao();
   }, () => alert("Não foi possível carregar. Verifique a internet.")));
 
-  $("btn-cancelar").onclick = () => ativo && updateDoc(doc(db,"chamados",ativo.id), { status:"cancelado" });
+  $("btn-cancelar").onclick = () => { if (!ativo) return; updateDoc(doc(db,"chamados",ativo.id), { status:"cancelado" }); deleteDoc(doc(db,"propostas",ativo.id)).catch(() => {}); };
   $("btn-chamar").onclick = async () => {
     const btn = $("btn-chamar");
     if (!navigator.geolocation) { alert("Seu celular não permite localização."); return; }
@@ -357,13 +357,17 @@ function iniciarPainel(user, admin, perfil){
     const hist = admin ? [] : itens.filter(c => !abertos(c) && eHoje(c)).sort((a,b) => seg(b)-seg(a));
     histL = hist; atualizarApagar();
     if (!admin && fontes.meus !== undefined) limparAntigos(itens.filter(c => c.motoristaId === EU.uid));
+    if (!admin) {
+      const acordos = itens.filter(c => c.status === "aceito" && c.motoristaId === EU.uid && c.viaProposta && !c.contagemFeita && !contandoAcordo.has(c.id));
+      if (acordos.length) { beep(); acordos.forEach(c => { contandoAcordo.add(c.id); registrarAcordo(c); }); }
+    }
     if (!admin && fontes.espera !== undefined) {
       const novos = ativos.filter(c => c.status === "aguardando" && !visVistos.has(c.id));
       if (visInit && novos.length) beep();
       novos.forEach(c => visVistos.add(c.id)); visInit = true;
     }
     if (!admin && fontes.meus !== undefined && dispOcup !== ocupado) { dispOcup = ocupado; setDoc(doc(db,"disponibilidade",EU.uid), { ocupado }, { merge:true }).catch(() => {}); }
-    const sig = ativos.map(c => c.id + c.status).join(",") + "|" + ocupado;
+    const sig = ativos.map(c => c.id + c.status + (c.negociando > Date.now() ? "n" : "")).join(",") + "|" + ocupado;
     if (leve === true && sig === lastSig) return;
     lastSig = sig;
     $("lista").innerHTML = (admin ? `<div class="resumo">Aguardando: ${ativos.length} · Em andamento agora: ${itens.filter(c => c.status === "aceito").length}</div>` : "") + (ativos.length ? ativos.map(c => {
@@ -375,15 +379,15 @@ function iniciarPainel(user, admin, perfil){
         ${c.referencia ? `<div class="ref">Referência: ${esc(c.referencia)}</div>` : ""}
         ${c.destino ? `<div class="ref">Destino: ${esc(c.destino)}</div>` : ""}
         ${c.valor > 0 ? `<div class="ref">Valor oferecido: ${brl(c.valor)}</div>` : ""}
-        ${c.contra ? `<div class="ref">${c.contra.motoristaId === EU.uid ? "Sua proposta de " + brl(c.contra.valor) + " aguarda a resposta do passageiro" : "Outro motorista propôs " + brl(c.contra.valor) + ". Aguarde a resposta do passageiro"}</div>` : ""}
+        ${esp && c.negociando > Date.now() ? `<div class="ref">${c.negociandoPor === EU.uid ? "Sua proposta aguarda a resposta do passageiro" : "Outro motorista está negociando com o passageiro"}</div>` : ""}
         ${c.distKm > 0 ? `<div class="ref">Corrida de ${String(c.distKm).replace(".", ",")} km (~${c.duracaoMin} min) · estimativa ${brl(c.estimativa)}</div>` : ""}
         <div class="acoes">
           ${c.iniciada && (c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${destUrl(c)}">Trajeto até o destino</a>` : `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Rota até o passageiro</a>`}
           ${esp && (c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&origin=${c.lat},${c.lng}&destination=${destUrl(c)}">Ver trajeto da corrida</a>` : ""}
           ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
-          ${esp ? (ocupado || admin ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : (c.iniciada ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>` : `<button class="b-ok" data-a="iniciar" data-id="${c.id}">Iniciar corrida</button>`)}
+          ${esp ? (ocupado || admin || c.negociando > Date.now() ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : (c.iniciada ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>` : `<button class="b-ok" data-a="iniciar" data-id="${c.id}">Iniciar corrida</button>`)}
           ${esp && !admin ? `<button class="b-cancel" data-rec="${c.id}">Recusar</button>` : ""}
-          ${esp && !admin && !ocupado && !c.contra && !(c.propostasDe || []).includes(EU.uid) ? `<button class="b-esp" data-prop="${c.id}" data-valor="${c.valor || 0}" style="grid-column:1/3">Propor outro valor</button>` : ""}
+          ${esp && !admin && !ocupado && !(c.negociando > Date.now()) && !(c.propostasDe || []).includes(EU.uid) ? `<button class="b-esp" data-prop="${c.id}" data-uid="${c.uid}" data-valor="${c.valor || 0}" style="grid-column:1/3">Propor outro valor</button>` : ""}
           ${!esp && meu && !c.iniciada ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
         </div></div>`;
@@ -566,7 +570,7 @@ function iniciarPainel(user, admin, perfil){
 }
 
 $("lista").addEventListener("click", e => {
-  const pr = e.target.closest("[data-prop]"); if (pr) { proporValor(pr.dataset.prop, Number(pr.dataset.valor)); return; }
+  const pr = e.target.closest("[data-prop]"); if (pr) { proporValor(pr.dataset.prop, Number(pr.dataset.valor), pr.dataset.uid); return; }
   const rc = e.target.closest("[data-rec]"); if (rc) { recusarId(rc.dataset.rec); return; }
   const ch = e.target.closest("[data-chat]"); if (ch) { abrirChat(ch.dataset.chat, ch.dataset.nome); return; }
   const b = e.target.closest("button[data-id]"); if (!b) return;
@@ -656,6 +660,7 @@ async function aplicarNotas(itens){
     await lote.commit();
   } catch { novos.forEach(c => contando.delete(c.id)); }
 }
+let propostaAtual = null, tProp = null, propUnsub = null, propId = null;
 let livresIds = [], dispPronto = false, livresN = 0, onlineN = 0, ultCli = null, repintarPainel = () => {}, recusarId = () => {};
 let PLANO = { dias:15, valor:100 }, solicitacao = null, notaId = null, ultCh = null, mapa = null, mkP = null, mkM = null;
 const brl = v => "R$ " + Number(v).toFixed(2).replace(".", ",");
@@ -695,14 +700,40 @@ $("btn-pagar").onclick = () => abrirPix("Leandro Vanzeler · Mercado Pago", mont
   "Pague " + brl(PLANO.valor) + " e avise o administrador. Ele libera seu acesso depois de conferir o pagamento.", zapLink("Paguei a mensalidade do LZ EXPRESS."));
 
 /* ---------- Avaliação e localização do motorista ---------- */
-$("btn-contra-ok").onclick = () => {
-  const c = ultCli; if (!c || !c.contra) return;
-  updateDoc(doc(db,"chamados",c.id), { contra:deleteField(), valor:c.contra.valor }).catch(() => alert("Não foi possível responder à proposta."));
-};
-$("btn-contra-no").onclick = () => {
+const propostaAtiva = () => !!(propostaAtual && propostaAtual.expiraEm > Date.now());
+function atualizarContraUI(){
+  const mostrar = !!(ultCli && ultCli.status === "aguardando" && propostaAtiva());
+  $("contra-btns").classList.toggle("hidden", !mostrar);
+  if (mostrar) $("btn-contra-ok").textContent = "Aceitar " + brl(propostaAtual.valor);
+}
+function monitorarProposta(id){
+  if (id === propId) return;
+  if (propUnsub) { propUnsub(); propUnsub = null; }
+  clearTimeout(tProp); propostaAtual = null; propId = id;
+  if (!id) { atualizarContraUI(); return; }
+  propUnsub = onSnapshot(doc(db,"propostas",id), d => {
+    propostaAtual = d.exists() ? d.data() : null;
+    clearTimeout(tProp);
+    if (propostaAtual) tProp = setTimeout(() => { atualizarContraUI(); repintarStatus(); }, Math.max(0, propostaAtual.expiraEm - Date.now()) + 300);
+    atualizarContraUI(); repintarStatus();
+  }, () => {});
+}
+function recusarProposta(){
   const c = ultCli; if (!c) return;
-  updateDoc(doc(db,"chamados",c.id), { contra:deleteField() }).catch(() => alert("Não foi possível responder à proposta."));
+  const lote = writeBatch(db);
+  lote.update(doc(db,"chamados",c.id), { negociando:deleteField(), negociandoPor:deleteField() });
+  lote.delete(doc(db,"propostas",c.id));
+  lote.commit().catch(() => alert("Não foi possível responder à proposta."));
+}
+$("btn-contra-ok").onclick = async () => {
+  const c = ultCli, p = propostaAtual; if (!c || !p || !propostaAtiva()) return;
+  if (!livresIds.includes(p.motoristaId)) { alert("O motorista ficou ocupado. O seu chamado continua aberto para os outros motoristas."); recusarProposta(); return; }
+  const lote = writeBatch(db);
+  lote.update(doc(db,"chamados",c.id), { status:"aceito", motoristaId:p.motoristaId, motoristaNome:p.motoristaNome, valor:p.valor, aceitoEm:serverTimestamp(), viaProposta:true, negociando:deleteField(), negociandoPor:deleteField() });
+  lote.delete(doc(db,"propostas",c.id));
+  try { await lote.commit(); } catch { alert("Não foi possível fechar a corrida. O motorista pode ter ficado ocupado."); }
 };
+$("btn-contra-no").onclick = recusarProposta;
 $("estrelas").onclick = async e => {
   const b = e.target.closest("button[data-n]"); if (!b || !notaId) return;
   const id = notaId; notaId = null; $("nota-tela").classList.add("hidden"); atualizarBotaoGlobal();
@@ -750,12 +781,22 @@ const dentro = (lat, lng) => lat >= AREA.sul && lat <= AREA.norte && lng >= AREA
 let atualizarBotaoGlobal = () => {};
 
 /* ---------- Proposta de valor e limpeza diária ---------- */
-function proporValor(id, atual){
+const contandoAcordo = new Set();
+function registrarAcordo(c){
+  const lote = writeBatch(db);
+  lote.set(doc(db,"contagem",EU.uid), { total:increment(1), dias:{ [new Date().toLocaleDateString("sv-SE")]:increment(1) } }, { merge:true });
+  lote.set(doc(db,"disponibilidade",EU.uid), { ocupado:true }, { merge:true });
+  lote.update(doc(db,"chamados",c.id), { contagemFeita:true });
+  lote.commit().catch(() => contandoAcordo.delete(c.id));
+}
+function proporValor(id, atual, uidPass){
   const v = parseFloat(String(prompt("Qual valor você propõe ao passageiro? (R$)", atual > 0 ? atual : "")).replace(",", "."));
   if (!(v >= 1 && v <= 500) || !EU) return;
-  updateDoc(doc(db,"chamados",id), { contra:{ valor:Math.round(v * 100) / 100, motoristaId:EU.uid, motoristaNome:EU.nome, em:Date.now() }, propostasDe:arrayUnion(EU.uid) })
-    .then(() => alert("Proposta enviada! Aguarde a resposta do passageiro."))
-    .catch(() => alert("Não foi possível enviar a proposta."));
+  const exp = Date.now() + 60000, lote = writeBatch(db);
+  lote.update(doc(db,"chamados",id), { negociando:exp, negociandoPor:EU.uid, propostasDe:arrayUnion(EU.uid) });
+  lote.set(doc(db,"propostas",id), { valor:Math.round(v * 100) / 100, motoristaId:EU.uid, motoristaNome:EU.nome, passageiroUid:uidPass, expiraEm:exp, criadoEm:serverTimestamp() });
+  lote.commit().then(() => alert("Proposta enviada! O passageiro tem 60 segundos para responder. Se ele aceitar, a corrida aparece para você."))
+    .catch(() => alert("Não foi possível enviar a proposta. Outro motorista pode estar negociando."));
 }
 const limpando = new Set();
 async function limparAntigos(itens){
