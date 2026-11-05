@@ -27,7 +27,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 
 let EU = null, cadastrando = null; const fones = {};
 let modoCadastro = false, unsubs = [], audioCtx = null;
-const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); seguirGPS(null); monitorarProposta(null); };
+const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); seguirGPS(null); monitorarProposta(null); pararPassageiro(); };
 
 const perfilKey = uid => "lz_perfil_" + uid;
 function nomeDe(user){ try { return JSON.parse(localStorage.getItem(perfilKey(user.uid)) || "{}").nome || user.displayName || ""; } catch { return user.displayName || ""; } }
@@ -205,6 +205,9 @@ function iniciarCliente(user){
     $("btn-chat-cli").onclick = () => aceito && abrirChat(aceito.id, aceito.motoristaNome || "o motorista");
     ultCh = aceito;
     $("btn-loc-cli").classList.toggle("hidden", !aceito || !!aceito.iniciada);
+    $("btn-compartilhar").classList.toggle("hidden", !aceito);
+    if (shareCod && !(ult && ult.status === "aceito")) { limparCompartilhar(false); $("sos-tela").classList.add("hidden"); }
+    else if (!shareCod && aceito && aceito.compartilhamento) { shareCod = aceito.compartilhamento; seguirPassageiro(); }
     if (!aceito) $("loc-tela").classList.add("hidden"); else if (!$("loc-tela").classList.contains("hidden")) desenharLoc();
     const ign = (() => { try { return JSON.parse(localStorage.getItem("lz_ign") || "[]"); } catch { return []; } })();
     if (ult.status === "finalizado" && ult.motoristaId && !ult.nota && !ign.includes(ult.id)) {
@@ -290,7 +293,7 @@ async function aceitar(id){
     await runTransaction(db, async t => {
       const ref = doc(db,"chamados",id), s = await t.get(ref);
       if (!s.exists() || s.data().status !== "aguardando") throw new Error("ja");
-      t.update(ref, { status:"aceito", motoristaId:EU.uid, motoristaNome:EU.nome, aceitoEm:serverTimestamp(), aviso:"" });
+      t.update(ref, { status:"aceito", motoristaId:EU.uid, motoristaNome:EU.nome, moto:EU.moto, aceitoEm:serverTimestamp(), aviso:"" });
       t.set(doc(db,"disponibilidade",EU.uid), { ocupado:true }, { merge:true });
       t.set(doc(db,"contagem",EU.uid), { total:increment(1), dias:{ [new Date().toLocaleDateString("sv-SE")]:increment(1) } }, { merge:true });
     });
@@ -316,6 +319,7 @@ function iniciarPainel(user, admin, perfil){
     nome: admin ? MOTORISTA_NOME : perfil.nome,
     zap: (admin ? MOTORISTA_ZAP : perfil.telefone) || "",
     pix: admin ? PIX_PAYLOAD : montarPix(perfil.pixChave || "", perfil.nome),
+    moto: admin ? null : { modelo:perfil.modelo || "", cor:perfil.cor || "", placa:perfil.placa || "" },
     pixNome: admin ? "Leandro Vanzeler Vasconcelos · Mercado Pago" : perfil.nome };
   ["aba-motoristas"].forEach(i => $(i).classList.toggle("hidden", !admin));
   $("btn-apagar").classList.add("hidden");
@@ -344,7 +348,7 @@ function iniciarPainel(user, admin, perfil){
     const abertos = c => ["aguardando","aceito"].includes(c.status);
     ocupado = !admin && itens.some(c => c.status === "aceito" && c.motoristaId === EU.uid);
     const meuAtivo = admin ? null : itens.find(c => c.status === "aceito" && c.motoristaId === EU.uid);
-    aoMudarChat = render; monitorarChat(meuAtivo && !meuAtivo.iniciada ? meuAtivo.id : null); seguirGPS(meuAtivo ? meuAtivo.id : null);
+    aoMudarChat = render; monitorarChat(meuAtivo && !meuAtivo.iniciada ? meuAtivo.id : null); seguirGPS(meuAtivo ? meuAtivo.id : null); gpsCod = meuAtivo ? (meuAtivo.compartilhamento || null) : null;
     const agora = Date.now() / 1000;
     const dist = c => posAtual ? km(posAtual.lat, posAtual.lng, c.lat, c.lng) : null;
     const atraso = c => { const d = dist(c); return d === null ? 45 : d <= 1 ? 0 : d <= 2 ? 15 : d <= 4 ? 30 : 45; };
@@ -473,22 +477,37 @@ function iniciarPainel(user, admin, perfil){
     $("lista-solicitacoes").innerHTML = pend.length ? pend.map(x => `<div class="chamado"><h3>${esc(x.nome)}</h3>
       <div class="info">${esc(x.email)} · ${esc(x.telefone)}<br>Aceitou os termos em ${fmt(x.aceiteEm)} (v${esc(x.versaoTermos)})</div>
       <div class="acoes"><a class="b-zap" target="_blank" href="https://wa.me/${tel55(x.telefone)}" style="grid-column:1/3">WhatsApp</a>
-      <button class="b-ok" data-sol="ok" data-id="${x.id}">Aprovar</button><button class="b-cancel" data-sol="no" data-id="${x.id}">Recusar</button></div></div>`).join("")
+      <button class="b-ok" data-sol="ok" data-id="${x.id}">Cadastrar</button><button class="b-cancel" data-sol="no" data-id="${x.id}">Recusar</button></div></div>`).join("")
       : `<p class="vazio">Nenhuma solicitação no momento.</p>`;
   };
   unsubs.push(onSnapshot(collection(db,"solicitacoes"), snap => { sols = snap.docs.map(d => ({id:d.id, ...d.data()})); desenharSol(); }, () => {}));
+  let solSel = null;
   $("lista-solicitacoes").onclick = async e => {
     const b = e.target.closest("[data-sol]"); if (!b) return;
     const x = sols.find(y => y.id === b.dataset.id); if (!x) return;
+    if (b.dataset.sol === "no") {
+      try { if (confirm("Recusar " + x.nome + "?")) await updateDoc(doc(db,"solicitacoes",x.id), { status:"recusada" }); } catch { alert("Não foi possível concluir. Tente de novo."); }
+      return;
+    }
+    solSel = x;
+    $("cad-info").textContent = "WhatsApp: " + x.telefone + " · E-mail: " + x.email;
+    ["c-nasc","c-modelo","c-cor","c-placa","c-pix"].forEach(i => { $(i).value = ""; });
+    $("c-nome").value = x.nome || ""; $("c-erro").textContent = "";
+    $("cad-tela").classList.remove("hidden");
+  };
+  $("c-voltar").onclick = () => $("cad-tela").classList.add("hidden");
+  $("c-finalizar").onclick = async () => {
+    const x = solSel; if (!x) return;
+    const dm = { nome:$("c-nome").value.trim(), nasc:$("c-nasc").value, modelo:$("c-modelo").value, cor:$("c-cor").value, placa:$("c-placa").value, pix:$("c-pix").value };
+    const erro = validarMoto(dm); if (erro) { $("c-erro").textContent = erro; return; }
+    $("c-finalizar").disabled = true; $("c-erro").textContent = "";
     try {
-      if (b.dataset.sol === "no") { if (confirm("Recusar " + x.nome + "?")) await updateDoc(doc(db,"solicitacoes",x.id), { status:"recusada" }); return; }
-      const chave = prompt("Chave Pix de " + x.nome + " (peça pelo WhatsApp):");
-      if (!chave || !chave.trim()) return;
-      await setDoc(doc(db,"motoristas",x.id), { nome:x.nome, telefone:tel55(x.telefone), email:x.email, pixChave:chave.trim(), ativo:true,
-        validoAte: Timestamp.fromMillis(Date.now() + PLANO.dias * 86400000), criadoEm:serverTimestamp() });
+      await setDoc(doc(db,"motoristas",x.id), { ...dadosMoto(dm), telefone:tel55(x.telefone), email:x.email, ativo:true, validoAte:Timestamp.fromMillis(Date.now() + PLANO.dias * 86400000), criadoEm:serverTimestamp() });
       await updateDoc(doc(db,"solicitacoes",x.id), { status:"aprovada" });
-      alert(x.nome + " aprovado! Peça para ele fechar e abrir o app.");
-    } catch { alert("Não foi possível concluir. Tente de novo."); }
+      $("cad-tela").classList.add("hidden"); solSel = null;
+      alert(dm.nome + " cadastrado! Peça para ele fechar e abrir o app.");
+    } catch { $("c-erro").textContent = "Não foi possível salvar. Tente de novo."; }
+    $("c-finalizar").disabled = false;
   };
 
   let mots = [], cont = {}, acum = {}, disp = {};
@@ -507,7 +526,7 @@ function iniciarPainel(user, admin, perfil){
       const its = todosItens.filter(z => z.motoristaId === m.id && z.nota && !z.contado), a = acum[m.id] || {};
       const nota = mediaTxt(its.reduce((s2,z) => s2 + z.nota, 0) + (a.soma || 0), its.length + (a.total || 0));
       return `<div class="chamado ${m.ativo?"aceito":"fim"}"><h3>${esc(m.nome)}${m.ativo ? "" : " (desativado)"}</h3>
-        <div class="info">${esc(m.email)} · ${esc(m.telefone)}<br>Corridas aceitas: hoje ${dias[dia] || 0} · mês ${noMes} · total ${c.total || 0}<br>Nota: ${nota}<br>Situação: <span class="${sit[1]}">${sit[0]}</span><br><span class="${cor}">${plano}</span></div>
+        <div class="info">${esc(m.email)} · ${esc(m.telefone)}<br>Moto: ${esc(m.modelo || "não informada")} · ${esc(m.cor || "")} · ${esc(m.placa || "")}<br>Corridas aceitas: hoje ${dias[dia] || 0} · mês ${noMes} · total ${c.total || 0}<br>Nota: ${nota}<br>Situação: <span class="${sit[1]}">${sit[0]}</span><br><span class="${cor}">${plano}</span></div>
         <div class="acoes">
           ${dsp.ocupado ? `<button class="b-esp" data-mot="liberar" data-id="${m.id}" style="grid-column:1/3">Liberar motorista (marcar como livre)</button>` : ""}
           <button class="b-ok" data-mot="pagou" data-id="${m.id}" style="grid-column:1/3">Registrar pagamento (+30 dias)</button>
@@ -552,17 +571,19 @@ function iniciarPainel(user, admin, perfil){
   };
   $("btn-cad-mot").onclick = async () => {
     const v = id => $(id).value.trim();
-    const nome = v("m-nome"), email = v("m-email"), senha = $("m-senha").value, pixChave = v("m-pix");
+    const dm = { nome:v("m-nome"), nasc:$("m-nasc").value, modelo:v("m-modelo"), cor:v("m-cor"), placa:v("m-placa"), pix:v("m-pix") };
+    const email = v("m-email"), senha = $("m-senha").value;
     let telefone = v("m-telefone").replace(/\D/g,"");
     $("m-erro").style.color = ""; $("m-erro").textContent = "";
-    if (!nome || !telefone || !email || senha.length < 6 || !pixChave) { $("m-erro").textContent = "Preencha tudo (senha com 6 ou mais caracteres)."; return; }
+    if (!telefone || !email || senha.length < 6) { $("m-erro").textContent = "Preencha o WhatsApp, o e-mail e uma senha de 6 ou mais caracteres."; return; }
+    const erro = validarMoto(dm); if (erro) { $("m-erro").textContent = erro; return; }
     if (!telefone.startsWith("55")) telefone = "55" + telefone;
     $("btn-cad-mot").disabled = true;
     try {
       const c = await createUserWithEmailAndPassword(authSec, email, senha);
-      await setDoc(doc(db,"motoristas",c.user.uid), { nome, telefone, email, pixChave, ativo:true, validoAte: Timestamp.fromMillis(Date.now() + PLANO.dias * 86400000), criadoEm:serverTimestamp() });
+      await setDoc(doc(db,"motoristas",c.user.uid), { ...dadosMoto(dm), telefone, email, ativo:true, validoAte:Timestamp.fromMillis(Date.now() + PLANO.dias * 86400000), criadoEm:serverTimestamp() });
       await signOut(authSec);
-      ["m-nome","m-telefone","m-email","m-senha","m-pix"].forEach(i => $(i).value = "");
+      ["m-nome","m-telefone","m-email","m-senha","m-nasc","m-modelo","m-cor","m-placa","m-pix"].forEach(i => { $(i).value = ""; });
       $("m-erro").style.color = "#2E7D5B"; $("m-erro").textContent = "Motorista cadastrado!";
     } catch (e) { $("m-erro").textContent = e.code === "auth/email-already-in-use" ? "Este e-mail já tem conta. Use outro e-mail." : erroMsg(e); }
     $("btn-cad-mot").disabled = false;
@@ -580,6 +601,7 @@ $("lista").addEventListener("click", e => {
   if (a === "aceito") { aceitar(b.dataset.id); return; }
   updateDoc(doc(db,"chamados",b.dataset.id), { status:"finalizado", finalizadoEm:serverTimestamp() }).catch(() => alert("Não foi possível finalizar."));
   setDoc(doc(db,"disponibilidade",EU.uid), { ocupado:false }, { merge:true }).catch(() => {});
+  if (gpsCod) deleteDoc(doc(db,"compartilhamentos",gpsCod)).catch(() => {});
   abaMot("hist");
 });
 $("lista-hist").addEventListener("click", e => { if (e.target.closest("[data-pix]") && EU) abrirPix(EU.pixNome, EU.pix); });
@@ -669,7 +691,9 @@ function repintarStatus(){
   const t = textoStatus(ultCli);
   $("status").className = "status " + t[2]; $("status-titulo").textContent = t[0]; $("status-texto").textContent = t[1];
 }
+const fmtZap = z => { let d = String(z || "").replace(/\D/g,""); if (d.length > 11 && d.startsWith("55")) d = d.slice(2); return d.length === 11 ? "(" + d.slice(0,2) + ") " + d.slice(2,7) + "-" + d.slice(7) : d; };
 function atualizarPlanoUI(){
+  document.querySelectorAll(".t-zap").forEach(e => { e.textContent = fmtZap(MOTORISTA_ZAP); });
   document.querySelectorAll(".t-dias").forEach(e => e.textContent = PLANO.dias + (PLANO.dias === 1 ? " dia" : " dias"));
   document.querySelectorAll(".t-valor").forEach(e => e.textContent = brl(PLANO.valor));
   $("plano-adm-txt").textContent = "Plano: " + PLANO.dias + " dias grátis · " + brl(PLANO.valor) + "/mês";
@@ -691,7 +715,7 @@ $("parc-enviar").onclick = async () => {
   try {
     const nomeS = $("parc-nome").value.trim(), foneS = $("parc-fone").value.trim();
     if (!nomeS || foneS.replace(/\D/g,"").length < 10) { alert("Preencha seu nome e seu WhatsApp com DDD."); $("parc-enviar").disabled = false; return; }
-    await setDoc(doc(db,"solicitacoes",u.uid), { nome:nomeS, telefone:foneS, email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"1.0", criadoEm:serverTimestamp() });
+    await setDoc(doc(db,"solicitacoes",u.uid), { nome:nomeS, telefone:foneS, email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"2.0", criadoEm:serverTimestamp() });
     $("parc-aceite").checked = false;
   } catch { alert("Não foi possível enviar. Tente de novo."); }
   $("parc-enviar").disabled = !$("parc-aceite").checked;
@@ -729,7 +753,7 @@ $("btn-contra-ok").onclick = async () => {
   const c = ultCli, p = propostaAtual; if (!c || !p || !propostaAtiva()) return;
   if (!livresIds.includes(p.motoristaId)) { alert("O motorista ficou ocupado. O seu chamado continua aberto para os outros motoristas."); recusarProposta(); return; }
   const lote = writeBatch(db);
-  lote.update(doc(db,"chamados",c.id), { status:"aceito", motoristaId:p.motoristaId, motoristaNome:p.motoristaNome, valor:p.valor, aceitoEm:serverTimestamp(), viaProposta:true, negociando:deleteField(), negociandoPor:deleteField() });
+  lote.update(doc(db,"chamados",c.id), { status:"aceito", motoristaId:p.motoristaId, motoristaNome:p.motoristaNome, moto:p.moto || null, valor:p.valor, aceitoEm:serverTimestamp(), viaProposta:true, negociando:deleteField(), negociandoPor:deleteField() });
   lote.delete(doc(db,"propostas",c.id));
   try { await lote.commit(); } catch { alert("Não foi possível fechar a corrida. O motorista pode ter ficado ocupado."); }
 };
@@ -762,7 +786,7 @@ function desenharLoc(){
 }
 $("btn-loc-cli").onclick = () => { $("loc-tela").classList.remove("hidden"); desenharLoc(); };
 $("loc-fechar").onclick = () => $("loc-tela").classList.add("hidden");
-let gpsId = null, gpsWatch = null, gpsUlt = 0;
+let gpsId = null, gpsWatch = null, gpsUlt = 0, gpsCod = null, gpsUltSh = 0;
 function seguirGPS(id){
   if (id === gpsId) return;
   if (gpsWatch !== null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; }
@@ -770,7 +794,9 @@ function seguirGPS(id){
   if (!id || !navigator.geolocation) return;
   gpsWatch = navigator.geolocation.watchPosition(p => {
     const t = Date.now(); if (t - gpsUlt < 10000) return; gpsUlt = t;
-    updateDoc(doc(db,"chamados",id), { motoristaPos:{ lat:p.coords.latitude, lng:p.coords.longitude, t } }).catch(() => {});
+    const pos = { lat:p.coords.latitude, lng:p.coords.longitude, t };
+    updateDoc(doc(db,"chamados",id), { motoristaPos:pos }).catch(() => {});
+    if (gpsCod && t - gpsUltSh >= 20000) { gpsUltSh = t; updateDoc(doc(db,"compartilhamentos",gpsCod), { motoristaPos:pos }).catch(() => {}); }
   }, () => {}, { enableHighAccuracy:true, maximumAge:5000 });
 }
 
@@ -794,7 +820,7 @@ function proporValor(id, atual, uidPass){
   if (!(v >= 1 && v <= 500) || !EU) return;
   const exp = Date.now() + 60000, lote = writeBatch(db);
   lote.update(doc(db,"chamados",id), { negociando:exp, negociandoPor:EU.uid, propostasDe:arrayUnion(EU.uid) });
-  lote.set(doc(db,"propostas",id), { valor:Math.round(v * 100) / 100, motoristaId:EU.uid, motoristaNome:EU.nome, passageiroUid:uidPass, expiraEm:exp, criadoEm:serverTimestamp() });
+  lote.set(doc(db,"propostas",id), { valor:Math.round(v * 100) / 100, motoristaId:EU.uid, motoristaNome:EU.nome, moto:EU.moto, passageiroUid:uidPass, expiraEm:exp, criadoEm:serverTimestamp() });
   lote.commit().then(() => alert("Proposta enviada! O passageiro tem 60 segundos para responder. Se ele aceitar, a corrida aparece para você."))
     .catch(() => alert("Não foi possível enviar a proposta. Outro motorista pode estar negociando."));
 }
@@ -810,6 +836,57 @@ async function limparAntigos(itens){
     const lote = writeBatch(db); refs.forEach(r => lote.delete(r)); await lote.commit();
   } catch { velhos.forEach(c => limpando.delete(c.id)); }
 }
+
+/* ---------- Dados do motorista ---------- */
+const normPlaca = p => String(p).toUpperCase().replace(/[^A-Z0-9]/g, "");
+function validarMoto(d){
+  if (!d.nome || d.nome.trim().split(/\s+/).length < 2) return "Digite o nome completo.";
+  if (!d.nasc) return "Informe a data de nascimento.";
+  const n = new Date(d.nasc + "T00:00:00"), hoje = new Date();
+  let idade = hoje.getFullYear() - n.getFullYear();
+  if (hoje < new Date(hoje.getFullYear(), n.getMonth(), n.getDate())) idade--;
+  if (!(idade >= 18 && idade <= 90)) return "O motorista precisa ter 18 anos ou mais.";
+  if (!d.modelo.trim() || !d.cor.trim()) return "Informe o modelo e a cor da moto.";
+  if (!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(normPlaca(d.placa))) return "Placa inválida. Use o formato ABC1D23 ou ABC-1234.";
+  if (!d.pix.trim()) return "Informe a chave Pix.";
+  return "";
+}
+const dadosMoto = d => ({ nome:d.nome.trim(), nascimento:d.nasc, modelo:d.modelo.trim(), cor:d.cor.trim(), placa:normPlaca(d.placa), pixChave:d.pix.trim() });
+
+/* ---------- Compartilhar corrida (passageiro) ---------- */
+let shareCod = null, shareWatch = null, shareUlt = 0;
+const baseSite = () => location.origin + location.pathname.replace(/[^/]*$/, "");
+const novoCodigo = () => Array.from(crypto.getRandomValues(new Uint8Array(20)), b => (b % 36).toString(36)).join("");
+function atualizarSos(){ $("sos-ativo").classList.toggle("hidden", !shareCod); $("sos-parar").classList.toggle("hidden", !shareCod); }
+function seguirPassageiro(){
+  if (shareWatch !== null || !shareCod || !navigator.geolocation) return;
+  shareWatch = navigator.geolocation.watchPosition(p => {
+    const t = Date.now(); if (t - shareUlt < 20000 || !shareCod) return; shareUlt = t;
+    updateDoc(doc(db,"compartilhamentos",shareCod), { passageiroPos:{ lat:p.coords.latitude, lng:p.coords.longitude, t } }).catch(() => {});
+  }, () => {}, { enableHighAccuracy:true, maximumAge:10000 });
+}
+function pararPassageiro(){ if (shareWatch !== null) { navigator.geolocation.clearWatch(shareWatch); shareWatch = null; } }
+function limparCompartilhar(apagarCampo){
+  const cod = shareCod; shareCod = null; pararPassageiro(); atualizarSos();
+  if (!cod) return;
+  deleteDoc(doc(db,"compartilhamentos",cod)).catch(() => {});
+  if (apagarCampo && ultCli) updateDoc(doc(db,"chamados",ultCli.id), { compartilhamento:deleteField() }).catch(() => {});
+}
+$("btn-compartilhar").onclick = () => { atualizarSos(); $("sos-tela").classList.remove("hidden"); };
+$("sos-fechar").onclick = () => $("sos-tela").classList.add("hidden");
+$("sos-parar").onclick = () => { limparCompartilhar(true); $("sos-tela").classList.add("hidden"); };
+$("sos-zap").onclick = async () => {
+  const c = ultCli; if (!c || c.status !== "aceito") return;
+  if (!shareCod) {
+    const cod = novoCodigo(), lote = writeBatch(db);
+    lote.set(doc(db,"compartilhamentos",cod), { chamadoId:c.id, passageiroUid:auth.currentUser.uid, passageiroNome:(nomeDe(auth.currentUser) || "Passageiro").split(" ")[0], motoristaNome:c.motoristaNome || "", moto:c.moto || null, motoristaPos:c.motoristaPos || null, passageiroPos:null, criadoEm:serverTimestamp(), expira:Date.now() + 3 * 3600 * 1000 });
+    lote.update(doc(db,"chamados",c.id), { compartilhamento:cod });
+    try { await lote.commit(); } catch { alert("Não foi possível criar o link. Tente de novo."); return; }
+    shareCod = cod; seguirPassageiro(); atualizarSos();
+  }
+  const msg = "Estou numa corrida de moto táxi pelo LZ EXPRESS. Acompanhe a minha corrida em tempo real: " + baseSite() + "acompanhar.html?c=" + shareCod;
+  window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank");
+};
 
 /* ---------- PWA ---------- */
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");

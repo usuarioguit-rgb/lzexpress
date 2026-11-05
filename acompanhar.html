@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0B1F3A">
+<title>Acompanhar corrida · LZ EXPRESS</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',system-ui,sans-serif;background:radial-gradient(120% 50% at 85% 0%,#1d3a6e 0%,#0a1b3a 45%,#050e22 100%) fixed;color:#f5f7fb;min-height:100vh}
+header{background:#0B1F3A;padding:16px 18px;display:flex;align-items:baseline;gap:8px;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+header b{font-family:'Sora',sans-serif;font-weight:800;font-size:24px;background:linear-gradient(135deg,#fbe08f,#f0a82d 55%,#e8821a);-webkit-background-clip:text;background-clip:text;color:transparent}
+header i{font-style:normal;font-family:'Sora',sans-serif;font-weight:700;letter-spacing:3px;font-size:13px}
+header span{margin-left:auto;font-size:13px;color:#a9b9d6}
+main{max-width:520px;margin:0 auto;padding:18px}
+.hidden{display:none!important}
+.card{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:14px 16px;margin-bottom:12px}
+h1{font-family:'Sora',sans-serif;font-size:22px;margin-bottom:12px}
+.rot{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#a9b9d6;margin-bottom:4px}
+.big{font-family:'Sora',sans-serif;font-weight:700;font-size:20px}
+.placa{display:inline-block;margin-top:8px;background:#fff;color:#0a1b3a;font-family:'Sora',sans-serif;font-weight:800;font-size:26px;letter-spacing:4px;padding:6px 16px;border-radius:8px;border:3px solid #0a1b3a;outline:2px solid #f2c25b}
+#mapa{height:300px;border-radius:16px;overflow:hidden;margin:4px 0 8px;background:#0f2347;border:1px solid rgba(255,255,255,.14)}
+.sub{font-size:14px;color:#b4c3df;margin-bottom:6px}
+.legenda{font-size:13px;color:#b4c3df;margin-bottom:14px}
+.legenda i{display:inline-block;width:11px;height:11px;border-radius:50%;margin:0 4px 0 10px;border:2px solid #fff}
+.d1{background:#f2a82d}.d2{background:#2f7bff}
+.btn{display:block;text-align:center;text-decoration:none;font-weight:800;font-size:17px;padding:16px;border-radius:14px;border:1.5px solid #ff9a90;color:#ff9a90;margin-bottom:10px}
+.aviso{font-size:13px;color:#b4c3df;line-height:1.5}
+</style>
+</head>
+<body>
+<header><b>LZ</b><i>EXPRESS</i><span>Acompanhar corrida</span></header>
+<main>
+  <div id="estado" class="card">Carregando...</div>
+  <div id="dados" class="hidden">
+    <h1 id="titulo"></h1>
+    <div class="card"><div class="rot">Motorista</div><div id="mot" class="big"></div></div>
+    <div class="card"><div class="rot">Moto</div><div id="moto" class="big"></div><div id="placa" class="placa hidden"></div></div>
+    <div id="mapa"></div>
+    <p id="att" class="sub"></p>
+    <p class="legenda"><i class="d1"></i>Moto<i class="d2"></i>Passageiro</p>
+    <a class="btn" href="tel:190">Ligar para a Polícia (190)</a>
+    <p class="aviso">Se você acha que há perigo, ligue 190 e informe a placa da moto e este link. Este link só funciona enquanto a corrida estiver sendo compartilhada.</p>
+  </div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig } from "./config.js";
+const $ = id => document.getElementById(id);
+const cod = new URLSearchParams(location.search).get("c");
+const estado = t => { $("estado").textContent = t; $("estado").classList.remove("hidden"); $("dados").classList.add("hidden"); };
+let mapa = null, mkM = null, mkP = null, manual = false, dados = null;
+const faz = t => { if (!t) return ""; const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 90 ? s + " s" : Math.round(s / 60) + " min"; };
+function tempo(){
+  if (!dados) return;
+  const a = dados.motoristaPos ? "Moto atualizada há " + faz(dados.motoristaPos.t) : "Aguardando a posição da moto...";
+  const b = dados.passageiroPos ? " · Passageiro atualizado há " + faz(dados.passageiroPos.t) : "";
+  $("att").textContent = a + b;
+}
+function desenhar(){
+  const d = dados;
+  $("estado").classList.add("hidden"); $("dados").classList.remove("hidden");
+  $("titulo").textContent = "Corrida de " + (d.passageiroNome || "passageiro");
+  $("mot").textContent = d.motoristaNome || "Não informado";
+  const m = d.moto;
+  $("moto").textContent = m && (m.modelo || m.cor) ? [m.modelo, m.cor].filter(Boolean).join(" · ") : "Dados da moto não informados";
+  $("placa").textContent = m && m.placa ? m.placa : ""; $("placa").classList.toggle("hidden", !(m && m.placa));
+  if (!mapa) {
+    mapa = L.map("mapa", { zoomControl:true }).setView([-2.2437, -49.4958], 14);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"© OpenStreetMap" }).addTo(mapa);
+    mapa.on("dragstart zoomstart", () => { manual = true; });
+  }
+  setTimeout(() => mapa.invalidateSize(), 100);
+  const pts = [];
+  if (d.motoristaPos) { const p = [d.motoristaPos.lat, d.motoristaPos.lng]; pts.push(p); if (mkM) mkM.setLatLng(p); else mkM = L.circleMarker(p, { radius:10, color:"#fff", weight:3, fillColor:"#f2a82d", fillOpacity:1 }).addTo(mapa); }
+  if (d.passageiroPos) { const p = [d.passageiroPos.lat, d.passageiroPos.lng]; pts.push(p); if (mkP) mkP.setLatLng(p); else mkP = L.circleMarker(p, { radius:10, color:"#fff", weight:3, fillColor:"#2f7bff", fillOpacity:1 }).addTo(mapa); }
+  if (!manual && pts.length) { if (pts.length === 1) mapa.setView(pts[0], 16); else mapa.fitBounds(pts, { padding:[40,40], maxZoom:17 }); }
+  tempo();
+}
+if (!cod) estado("Link inválido.");
+else {
+  const db = getFirestore(initializeApp(firebaseConfig));
+  onSnapshot(doc(db, "compartilhamentos", cod),
+    snap => { if (!snap.exists()) { estado("Este link não está mais ativo. A corrida terminou ou o compartilhamento foi encerrado."); dados = null; return; } dados = snap.data(); desenhar(); },
+    () => estado("Link inválido ou expirado."));
+  setInterval(tempo, 5000);
+}
+</script>
+</body>
+</html>
