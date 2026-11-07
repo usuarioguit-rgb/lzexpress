@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteDoc, runTransaction, increment, getDocs, Timestamp, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, initializeFirestore, getDocsFromServer, doc, setDoc, getDoc, collection, addDoc, updateDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, writeBatch, deleteDoc, runTransaction, increment, getDocs, Timestamp, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { PIX_PAYLOAD, PIX_CHAVE } from "./pix.js";
 import { MOTORISTA_NOME, MOTORISTA_ZAP } from "./motorista.js";
 import * as cfg from "./config.js";
@@ -21,13 +21,14 @@ async function avisarMotorista(nome){
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const authSec = getAuth(initializeApp(firebaseConfig, "sec")); // cria contas de motoristas sem deslogar o admin
-const db = getFirestore(app);
+const db = initializeFirestore(app, { experimentalAutoDetectLongPolling:true });
+const dbAnon = initializeFirestore(initializeApp(firebaseConfig, "anon"), { experimentalAutoDetectLongPolling:true }); // lê como um visitante, para testar o link
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 let EU = null, cadastrando = null; const fones = {};
 let modoCadastro = false, unsubs = [], audioCtx = null;
-const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); seguirGPS(null); monitorarProposta(null); pararPassageiro(); };
+const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); seguirGPS(null); monitorarProposta(null); pararPassageiro(); aplicarDispGlobal = null; };
 
 const perfilKey = uid => "lz_perfil_" + uid;
 function nomeDe(user){ try { return JSON.parse(localStorage.getItem(perfilKey(user.uid)) || "{}").nome || user.displayName || ""; } catch { return user.displayName || ""; } }
@@ -180,8 +181,10 @@ function iniciarCliente(user){
     $("aviso-offline").classList.toggle("hidden", !!ativo || online !== false);
   };
   atualizarBotaoGlobal = atualizarBotao;
+  const aplicarDisp = docs => { const on = docs.filter(d => d.data().online === true); online = on.length > 0; onlineN = on.length; livresN = on.filter(d => d.data().ocupado !== true).length; livresIds = on.filter(d => d.data().ocupado !== true).map(d => d.id); dispPronto = true; atualizarBotao(); repintarStatus(); };
+  aplicarDispGlobal = aplicarDisp;
   unsubs.push(onSnapshot(collection(db,"disponibilidade"),
-    snap => { const on = snap.docs.filter(d => d.data().online === true); online = on.length > 0; onlineN = on.length; livresN = on.filter(d => d.data().ocupado !== true).length; livresIds = on.filter(d => d.data().ocupado !== true).map(d => d.id); dispPronto = true; atualizarBotao(); repintarStatus(); },
+    snap => aplicarDisp(snap.docs),
     () => { online = false; atualizarBotao(); }));
   unsubs.push(onSnapshot(query(collection(db,"chamados"), where("uid","==",user.uid)), snap => {
     const todos = snap.docs.map(d => ({id:d.id, ...d.data()}));
@@ -205,9 +208,10 @@ function iniciarCliente(user){
     $("btn-chat-cli").onclick = () => aceito && abrirChat(aceito.id, aceito.motoristaNome || "o motorista");
     ultCh = aceito;
     $("btn-loc-cli").classList.toggle("hidden", !aceito || !!aceito.iniciada);
-    $("btn-compartilhar").classList.toggle("hidden", !aceito);
+    $("btn-compartilhar").classList.toggle("hidden", !aceito || !aceito.iniciada);
     if (shareCod && !(ult && ult.status === "aceito")) { limparCompartilhar(false); $("sos-tela").classList.add("hidden"); }
-    else if (!shareCod && aceito && aceito.compartilhamento) { shareCod = aceito.compartilhamento; seguirPassageiro(); }
+    else if (!shareCod && aceito && aceito.compartilhamento) restaurarCompartilhar(aceito);
+    if (!aceito || !aceito.iniciada) $("sos-tela").classList.add("hidden");
     if (!aceito) $("loc-tela").classList.add("hidden"); else if (!$("loc-tela").classList.contains("hidden")) desenharLoc();
     const ign = (() => { try { return JSON.parse(localStorage.getItem("lz_ign") || "[]"); } catch { return []; } })();
     if (ult.status === "finalizado" && ult.motoristaId && !ult.nota && !ign.includes(ult.id)) {
@@ -319,7 +323,7 @@ function iniciarPainel(user, admin, perfil){
     nome: admin ? MOTORISTA_NOME : perfil.nome,
     zap: (admin ? MOTORISTA_ZAP : perfil.telefone) || "",
     pix: admin ? PIX_PAYLOAD : montarPix(perfil.pixChave || "", perfil.nome),
-    moto: admin ? null : { modelo:perfil.modelo || "", cor:perfil.cor || "", placa:perfil.placa || "" },
+    moto: admin ? null : { modelo:perfil.modelo || "", cor:perfil.cor || "", placa:perfil.placa || "", nomeCompleto:perfil.nome || "", nascimento:perfil.nascimento || "" },
     pixNome: admin ? "Leandro Vanzeler Vasconcelos · Mercado Pago" : perfil.nome };
   ["aba-motoristas"].forEach(i => $(i).classList.toggle("hidden", !admin));
   $("btn-apagar").classList.add("hidden");
@@ -715,7 +719,7 @@ $("parc-enviar").onclick = async () => {
   try {
     const nomeS = $("parc-nome").value.trim(), foneS = $("parc-fone").value.trim();
     if (!nomeS || foneS.replace(/\D/g,"").length < 10) { alert("Preencha seu nome e seu WhatsApp com DDD."); $("parc-enviar").disabled = false; return; }
-    await setDoc(doc(db,"solicitacoes",u.uid), { nome:nomeS, telefone:foneS, email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"2.0", criadoEm:serverTimestamp() });
+    await setDoc(doc(db,"solicitacoes",u.uid), { nome:nomeS, telefone:foneS, email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"2.1", criadoEm:serverTimestamp() });
     $("parc-aceite").checked = false;
   } catch { alert("Não foi possível enviar. Tente de novo."); }
   $("parc-enviar").disabled = !$("parc-aceite").checked;
@@ -875,18 +879,45 @@ function limparCompartilhar(apagarCampo){
 $("btn-compartilhar").onclick = () => { atualizarSos(); $("sos-tela").classList.remove("hidden"); };
 $("sos-fechar").onclick = () => $("sos-tela").classList.add("hidden");
 $("sos-parar").onclick = () => { limparCompartilhar(true); $("sos-tela").classList.add("hidden"); };
+let restaurando = false;
+async function restaurarCompartilhar(c){
+  if (restaurando) return; restaurando = true;
+  const apagar = () => updateDoc(doc(db,"chamados",c.id), { compartilhamento:deleteField() }).catch(() => {});
+  try {
+    const d = await getDoc(doc(db,"compartilhamentos",c.compartilhamento));
+    if (d.exists()) { shareCod = c.compartilhamento; seguirPassageiro(); atualizarSos(); } else apagar();
+  } catch { apagar(); }
+  restaurando = false;
+}
 $("sos-zap").onclick = async () => {
-  const c = ultCli; if (!c || c.status !== "aceito") return;
+  const c = ultCli; if (!c || c.status !== "aceito" || !c.iniciada) return;
+  if (shareCod) {
+    try { const d = await getDoc(doc(db,"compartilhamentos",shareCod)); if (!d.exists()) { shareCod = null; pararPassageiro(); } } catch { shareCod = null; pararPassageiro(); }
+  }
   if (!shareCod) {
     const cod = novoCodigo(), lote = writeBatch(db);
-    lote.set(doc(db,"compartilhamentos",cod), { chamadoId:c.id, passageiroUid:auth.currentUser.uid, passageiroNome:(nomeDe(auth.currentUser) || "Passageiro").split(" ")[0], motoristaNome:c.motoristaNome || "", moto:c.moto || null, motoristaPos:c.motoristaPos || null, passageiroPos:null, criadoEm:serverTimestamp(), expira:Date.now() + 3 * 3600 * 1000 });
+    lote.set(doc(db,"compartilhamentos",cod), { chamadoId:c.id, passageiroUid:auth.currentUser.uid, passageiroNome:(nomeDe(auth.currentUser) || "Passageiro").split(" ")[0], motoristaNome:c.motoristaNome || "", moto:c.moto || null, motoristaPos:c.motoristaPos || null, passageiroPos:null, criadoEm:serverTimestamp(), expira:Timestamp.fromMillis(Date.now() + 3 * 3600 * 1000) });
     lote.update(doc(db,"chamados",c.id), { compartilhamento:cod });
-    try { await lote.commit(); } catch { alert("Não foi possível criar o link. Tente de novo."); return; }
+    try { await lote.commit(); } catch (e) { alert("Não foi possível criar o link (" + (e.code || "erro") + "). Tente de novo."); return; }
     shareCod = cod; seguirPassageiro(); atualizarSos();
   }
+  try {
+    const t = await getDoc(doc(dbAnon,"compartilhamentos",shareCod));
+    if (!t.exists()) throw { code:"nao-encontrado" };
+  } catch (e) { alert("O link foi criado, mas não abre para quem não tem o app (" + (e.code || "erro") + "). Avise o administrador."); return; }
   const msg = "Estou numa corrida de moto táxi pelo LZ EXPRESS. Acompanhe a minha corrida em tempo real: " + baseSite() + "acompanhar.html?c=" + shareCod;
-  window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank");
+  const url = "https://wa.me/?text=" + encodeURIComponent(msg);
+  if (!window.open(url, "_blank")) location.href = url;
 };
+
+/* ---------- Status dos motoristas sempre em dia ---------- */
+let aplicarDispGlobal = null;
+const atualizarDispAgora = async () => {
+  if (!aplicarDispGlobal || !auth.currentUser) return;
+  try { const r = await getDocsFromServer(collection(db,"disponibilidade")); if (aplicarDispGlobal) aplicarDispGlobal(r.docs); } catch {}
+};
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") atualizarDispAgora(); });
+window.addEventListener("online", atualizarDispAgora);
 
 /* ---------- PWA ---------- */
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");

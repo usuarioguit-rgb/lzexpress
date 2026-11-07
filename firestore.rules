@@ -68,14 +68,15 @@ service cloud.firestore {
       allow delete: if admin();
     }
     match /compartilhamentos/{cod} {
-      allow get: if resource.data.expira > request.time.toMillis();
+      allow get: if resource.data.expira > request.time;
       allow list: if request.auth != null && resource.data.passageiroUid == request.auth.uid;
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['chamadoId','passageiroUid','passageiroNome','motoristaNome','moto','motoristaPos','passageiroPos','criadoEm','expira'])
         && request.resource.data.passageiroUid == request.auth.uid
         && get(/databases/$(database)/documents/chamados/$(request.resource.data.chamadoId)).data.uid == request.auth.uid
         && get(/databases/$(database)/documents/chamados/$(request.resource.data.chamadoId)).data.status == "aceito"
-        && request.resource.data.expira <= request.time.toMillis() + 14400000;
+        && request.resource.data.expira is timestamp
+        && request.resource.data.expira <= request.time + duration.value(4, "h");
       allow update: if request.auth != null && (
         (resource.data.passageiroUid == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['passageiroPos']))
