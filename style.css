@@ -274,3 +274,8 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .termos ul{margin:6px 0 6px 18px;padding:0}.termos li{margin:2px 0}
 .pix-card .btn.secundario{background:transparent;color:#ff9a90;border:1.5px solid #ff9a90}
 a.btn.secundario{display:block;text-align:center;text-decoration:none}
+
+/* ===== Alertas SOS (administrador) ===== */
+#alertas-sos .alerta{background:rgba(220,70,60,.16);border:1.5px solid #ff6b5e;border-radius:18px;padding:16px;margin-bottom:14px}
+#alertas-sos .alerta h3{font-family:'Sora',sans-serif;font-size:17px;color:#ffb4ab;margin-bottom:6px}
+#alertas-sos .info{color:#f5f7fb;font-size:14px;line-height:1.6;margin-bottom:10px}

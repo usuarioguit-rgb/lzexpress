@@ -390,8 +390,7 @@ function iniciarPainel(user, admin, perfil){
         ${esp && c.negociando > Date.now() ? `<div class="ref">${c.negociandoPor === EU.uid ? "Sua proposta aguarda a resposta do passageiro" : "Outro motorista está negociando com o passageiro"}</div>` : ""}
         ${c.distKm > 0 ? `<div class="ref">Corrida de ${String(c.distKm).replace(".", ",")} km (~${c.duracaoMin} min) · estimativa ${brl(c.estimativa)}</div>` : ""}
         <div class="acoes">
-          ${c.iniciada && (c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${destUrl(c)}">Trajeto até o destino</a>` : `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Rota até o passageiro</a>`}
-          ${esp && (c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&origin=${c.lat},${c.lng}&destination=${destUrl(c)}">Ver trajeto da corrida</a>` : ""}
+          ${c.iniciada ? ((c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${destUrl(c)}">Trajeto até o destino</a>` : "") : ((c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&origin=${c.lat},${c.lng}&destination=${destUrl(c)}">Ver trajeto da corrida</a>` : `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}">Ver localização do passageiro</a>`)}
           ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
           ${esp ? (ocupado || admin || c.negociando > Date.now() ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : (c.iniciada ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>` : `<button class="b-ok" data-a="iniciar" data-id="${c.id}">Iniciar corrida</button>`)}
           ${esp && !admin ? `<button class="b-cancel" data-rec="${c.id}">Recusar</button>` : ""}
@@ -515,7 +514,29 @@ function iniciarPainel(user, admin, perfil){
   };
 
   let mots = [], cont = {}, acum = {}, disp = {};
+  let alertas = [], alertasPronto = false;
+  const mapaLink = p => p ? "https://www.google.com/maps/search/?api=1&query=" + p.lat + "," + p.lng : "";
+  const desenharAlertas = () => {
+    const novos = alertas.filter(a => a.status === "novo").sort((a,b) => seg(b) - seg(a));
+    $("alertas-sos").innerHTML = novos.map(a => {
+      const m = a.moto || {}, mot = mots.find(x => x.id === a.motoristaId) || {};
+      const ch = todosItens.find(x => x.id === a.chamadoId), mp = (ch && ch.motoristaPos) || a.motoristaPos, pp = a.passageiroPos;
+      return `<div class="alerta"><h3>ALERTA SOS · ${esc(a.passageiroNome)}</h3>
+        <div class="info">${fmt(a.criadoEm)}${a.iniciada ? " · corrida iniciada" : " · motorista a caminho"}<br>Motorista: <b>${esc(m.nomeCompleto || a.motoristaNome || "—")}</b> · nascimento ${esc(m.nascimento ? m.nascimento.split("-").reverse().join("/") : "—")}<br>WhatsApp do motorista: ${esc(mot.telefone || "—")}<br>Moto: ${esc(m.modelo || "—")} · ${esc(m.cor || "—")} · placa <b>${esc(m.placa || "—")}</b><br>Destino: ${esc(a.destino || "—")}</div>
+        <div class="acoes">${pp ? `<a class="b-mapa" target="_blank" href="${mapaLink(pp)}">Onde está o passageiro</a>` : ""}${mp ? `<a class="b-mapa" target="_blank" href="${mapaLink(mp)}">Onde está a moto</a>` : ""}${mot.telefone ? `<a class="b-zap" target="_blank" href="https://wa.me/${tel55(mot.telefone)}">WhatsApp do motorista</a>` : ""}<button class="b-ok" data-alerta="${a.id}" style="grid-column:1/3">Marcar como resolvido</button></div></div>`;
+    }).join("");
+  };
+  unsubs.push(onSnapshot(collection(db,"alertas"), snap => {
+    if (alertasPronto && snap.docChanges().some(c => c.type === "added" && c.doc.data().status === "novo")) beep();
+    alertasPronto = true;
+    alertas = snap.docs.map(d => ({id:d.id, ...d.data()})); desenharAlertas();
+  }, () => {}));
+  $("alertas-sos").onclick = e => {
+    const b = e.target.closest("[data-alerta]"); if (!b) return;
+    if (confirm("Marcar este alerta como resolvido? Ele será apagado.")) deleteDoc(doc(db,"alertas",b.dataset.alerta)).catch(() => alert("Não foi possível concluir."));
+  };
   const desenhar = () => {
+    desenharAlertas();
     $("btn-mostrar-lista").textContent = "Ver motoristas cadastrados (" + mots.length + ")";
     const mes = new Date().toLocaleDateString("sv-SE").slice(0,7), dia = new Date().toLocaleDateString("sv-SE");
     const onl = mots.filter(m => disp[m.id] && disp[m.id].online), emCorrida = onl.filter(m => disp[m.id].ocupado).length, aguard = todosItens.filter(z => z.status === "aguardando").length;
@@ -719,7 +740,7 @@ $("parc-enviar").onclick = async () => {
   try {
     const nomeS = $("parc-nome").value.trim(), foneS = $("parc-fone").value.trim();
     if (!nomeS || foneS.replace(/\D/g,"").length < 10) { alert("Preencha seu nome e seu WhatsApp com DDD."); $("parc-enviar").disabled = false; return; }
-    await setDoc(doc(db,"solicitacoes",u.uid), { nome:nomeS, telefone:foneS, email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"2.1", criadoEm:serverTimestamp() });
+    await setDoc(doc(db,"solicitacoes",u.uid), { nome:nomeS, telefone:foneS, email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"2.2", criadoEm:serverTimestamp() });
     $("parc-aceite").checked = false;
   } catch { alert("Não foi possível enviar. Tente de novo."); }
   $("parc-enviar").disabled = !$("parc-aceite").checked;
@@ -819,15 +840,28 @@ function registrarAcordo(c){
   lote.update(doc(db,"chamados",c.id), { contagemFeita:true });
   lote.commit().catch(() => contandoAcordo.delete(c.id));
 }
+let propSel = null;
 function proporValor(id, atual, uidPass){
-  const v = parseFloat(String(prompt("Qual valor você propõe ao passageiro? (R$)", atual > 0 ? atual : "")).replace(",", "."));
-  if (!(v >= 1 && v <= 500) || !EU) return;
-  const exp = Date.now() + 60000, lote = writeBatch(db);
+  if (!EU) return;
+  propSel = { id, uidPass };
+  $("prop-oferta").textContent = atual > 0 ? "O passageiro ofereceu " + brl(atual) + "." : "O passageiro não informou um valor.";
+  $("prop-valor").value = ""; $("prop-erro").textContent = "";
+  $("prop-tela").classList.remove("hidden");
+}
+$("prop-voltar").onclick = () => $("prop-tela").classList.add("hidden");
+$("prop-enviar").onclick = () => {
+  const v = parseFloat(String($("prop-valor").value).replace(",", "."));
+  if (!(v >= 1 && v <= 500)) { $("prop-erro").textContent = "Digite um valor entre R$ 1 e R$ 500."; return; }
+  if (!propSel || !EU) return;
+  const { id, uidPass } = propSel, exp = Date.now() + 60000, lote = writeBatch(db);
   lote.update(doc(db,"chamados",id), { negociando:exp, negociandoPor:EU.uid, propostasDe:arrayUnion(EU.uid) });
   lote.set(doc(db,"propostas",id), { valor:Math.round(v * 100) / 100, motoristaId:EU.uid, motoristaNome:EU.nome, moto:EU.moto, passageiroUid:uidPass, expiraEm:exp, criadoEm:serverTimestamp() });
-  lote.commit().then(() => alert("Proposta enviada! O passageiro tem 60 segundos para responder. Se ele aceitar, a corrida aparece para você."))
-    .catch(() => alert("Não foi possível enviar a proposta. Outro motorista pode estar negociando."));
-}
+  $("prop-enviar").disabled = true;
+  lote.commit()
+    .then(() => { $("prop-tela").classList.add("hidden"); alert("Proposta enviada! O passageiro tem 60 segundos para responder. Se ele aceitar, a corrida aparece para você."); })
+    .catch(() => { $("prop-erro").textContent = "Não foi possível enviar. Outro motorista pode estar negociando."; })
+    .finally(() => { $("prop-enviar").disabled = false; });
+};
 const limpando = new Set();
 async function limparAntigos(itens){
   const ms = c => c.criadoEm ? c.criadoEm.seconds * 1000 : Date.now();
@@ -861,7 +895,7 @@ const dadosMoto = d => ({ nome:d.nome.trim(), nascimento:d.nasc, modelo:d.modelo
 let shareCod = null, shareWatch = null, shareUlt = 0;
 const baseSite = () => location.origin + location.pathname.replace(/[^/]*$/, "");
 const novoCodigo = () => Array.from(crypto.getRandomValues(new Uint8Array(20)), b => (b % 36).toString(36)).join("");
-function atualizarSos(){ $("sos-ativo").classList.toggle("hidden", !shareCod); $("sos-parar").classList.toggle("hidden", !shareCod); }
+function atualizarSos(){ $("sos-ativo").classList.toggle("hidden", !shareCod); $("sos-parar").classList.toggle("hidden", !shareCod); if (shareCod) $("sos-testar").href = baseSite() + "acompanhar.html?c=" + shareCod; }
 function seguirPassageiro(){
   if (shareWatch !== null || !shareCod || !navigator.geolocation) return;
   shareWatch = navigator.geolocation.watchPosition(p => {
@@ -879,9 +913,9 @@ function limparCompartilhar(apagarCampo){
 $("btn-compartilhar").onclick = () => { atualizarSos(); $("sos-tela").classList.remove("hidden"); };
 $("sos-fechar").onclick = () => $("sos-tela").classList.add("hidden");
 $("sos-parar").onclick = () => { limparCompartilhar(true); $("sos-tela").classList.add("hidden"); };
-let restaurando = false;
+let restaurando = false, criandoShare = false;
 async function restaurarCompartilhar(c){
-  if (restaurando) return; restaurando = true;
+  if (restaurando || criandoShare) return; restaurando = true;
   const apagar = () => updateDoc(doc(db,"chamados",c.id), { compartilhamento:deleteField() }).catch(() => {});
   try {
     const d = await getDoc(doc(db,"compartilhamentos",c.compartilhamento));
@@ -890,24 +924,37 @@ async function restaurarCompartilhar(c){
   restaurando = false;
 }
 $("sos-zap").onclick = async () => {
-  const c = ultCli; if (!c || c.status !== "aceito" || !c.iniciada) return;
-  if (shareCod) {
-    try { const d = await getDoc(doc(db,"compartilhamentos",shareCod)); if (!d.exists()) { shareCod = null; pararPassageiro(); } } catch { shareCod = null; pararPassageiro(); }
-  }
-  if (!shareCod) {
-    const cod = novoCodigo(), lote = writeBatch(db);
-    lote.set(doc(db,"compartilhamentos",cod), { chamadoId:c.id, passageiroUid:auth.currentUser.uid, passageiroNome:(nomeDe(auth.currentUser) || "Passageiro").split(" ")[0], motoristaNome:c.motoristaNome || "", moto:c.moto || null, motoristaPos:c.motoristaPos || null, passageiroPos:null, criadoEm:serverTimestamp(), expira:Timestamp.fromMillis(Date.now() + 3 * 3600 * 1000) });
-    lote.update(doc(db,"chamados",c.id), { compartilhamento:cod });
-    try { await lote.commit(); } catch (e) { alert("Não foi possível criar o link (" + (e.code || "erro") + "). Tente de novo."); return; }
-    shareCod = cod; seguirPassageiro(); atualizarSos();
-  }
+  const c = ultCli; if (!c || c.status !== "aceito" || !c.iniciada || criandoShare) return;
+  criandoShare = true;
   try {
-    const t = await getDoc(doc(dbAnon,"compartilhamentos",shareCod));
-    if (!t.exists()) throw { code:"nao-encontrado" };
-  } catch (e) { alert("O link foi criado, mas não abre para quem não tem o app (" + (e.code || "erro") + "). Avise o administrador."); return; }
-  const msg = "Estou numa corrida de moto táxi pelo LZ EXPRESS. Acompanhe a minha corrida em tempo real: " + baseSite() + "acompanhar.html?c=" + shareCod;
-  const url = "https://wa.me/?text=" + encodeURIComponent(msg);
-  if (!window.open(url, "_blank")) location.href = url;
+    if (shareCod) {
+      try { const d = await getDoc(doc(db,"compartilhamentos",shareCod)); if (!d.exists()) { shareCod = null; pararPassageiro(); } } catch { shareCod = null; pararPassageiro(); }
+    }
+    if (!shareCod) {
+      const cod = novoCodigo(), lote = writeBatch(db);
+      lote.set(doc(db,"compartilhamentos",cod), { chamadoId:c.id, passageiroUid:auth.currentUser.uid, passageiroNome:(nomeDe(auth.currentUser) || "Passageiro").split(" ")[0], motoristaNome:c.motoristaNome || "", moto:c.moto || null, motoristaPos:c.motoristaPos || null, passageiroPos:null, criadoEm:serverTimestamp(), expira:Timestamp.fromMillis(Date.now() + 3 * 3600 * 1000) });
+      lote.update(doc(db,"chamados",c.id), { compartilhamento:cod });
+      try { await lote.commit(); } catch (e) { alert("Não foi possível criar o link (" + (e.code || "erro") + "). Tente de novo."); return; }
+      shareCod = cod; seguirPassageiro(); atualizarSos();
+    }
+    try {
+      const t = await getDoc(doc(dbAnon,"compartilhamentos",shareCod));
+      if (!t.exists()) throw { code:"nao-encontrado" };
+    } catch (e) { alert("O link foi criado, mas não abre para quem não tem o app (" + (e.code || "erro") + "). Avise o administrador."); return; }
+    const msg = "Estou numa corrida de moto táxi pelo LZ EXPRESS. Acompanhe a minha corrida em tempo real: " + baseSite() + "acompanhar.html?c=" + shareCod;
+    const url = "https://wa.me/?text=" + encodeURIComponent(msg);
+    if (!window.open(url, "_blank")) location.href = url;
+  } finally { criandoShare = false; }
+};
+$("sos-alerta").onclick = async () => {
+  const c = ultCli; if (!c || c.status !== "aceito") return;
+  try {
+    if ((await getDoc(doc(db,"alertas",c.id))).exists()) { alert("O alerta desta corrida já foi enviado ao administrador. Se estiver em perigo, ligue 190."); return; }
+    const pos = await new Promise(res => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => res({ lat:p.coords.latitude, lng:p.coords.longitude, t:Date.now() }), () => res(null), { enableHighAccuracy:true, timeout:8000 }) : res(null));
+    await setDoc(doc(db,"alertas",c.id), { chamadoId:c.id, passageiroUid:auth.currentUser.uid, passageiroNome:nomeDe(auth.currentUser) || "Passageiro", motoristaId:c.motoristaId || "", motoristaNome:c.motoristaNome || "", moto:c.moto || null, destino:c.destino || "", valor:c.valor || 0, iniciada:!!c.iniciada, passageiroPos:pos, motoristaPos:c.motoristaPos || null, codigo:shareCod || "", criadoEm:serverTimestamp(), status:"novo" });
+    $("sos-tela").classList.add("hidden");
+    alert("Alerta enviado ao administrador. Se estiver em perigo, ligue 190.");
+  } catch { alert("Não foi possível enviar o alerta. Se estiver em perigo, ligue 190."); }
 };
 
 /* ---------- Status dos motoristas sempre em dia ---------- */

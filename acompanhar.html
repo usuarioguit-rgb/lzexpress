@@ -87,7 +87,7 @@ if (!cod) estado("Link inválido.");
 else {
   const db = initializeFirestore(initializeApp(firebaseConfig), { experimentalAutoDetectLongPolling:true });
   onSnapshot(doc(db, "compartilhamentos", cod),
-    snap => { if (!snap.exists()) { estado("Este link não está mais ativo. A corrida terminou ou o compartilhamento foi encerrado."); dados = null; return; } dados = snap.data(); try { desenhar(); } catch (e) { estado("Não foi possível mostrar os dados da corrida. (" + (e.message || "erro") + ")"); } },
+    snap => { if (!snap.exists()) { estado("Este link não está mais ativo. A corrida terminou ou o compartilhamento foi encerrado."); dados = null; return; } dados = snap.data(); if (dados.expira && dados.expira.toMillis && dados.expira.toMillis() < Date.now()) { estado("Este link expirou."); return; } try { desenhar(); } catch (e) { estado("Não foi possível mostrar os dados da corrida. (" + (e.message || "erro") + ")"); } },
     err => estado("Não foi possível abrir este link: ele é inválido, expirou ou foi encerrado. [" + ((err && err.code) || "erro") + "]"));
   setInterval(tempo, 5000);
 }

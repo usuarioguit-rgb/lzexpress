@@ -68,7 +68,7 @@ service cloud.firestore {
       allow delete: if admin();
     }
     match /compartilhamentos/{cod} {
-      allow get: if resource.data.expira > request.time;
+      allow get: if true;
       allow list: if request.auth != null && resource.data.passageiroUid == request.auth.uid;
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['chamadoId','passageiroUid','passageiroNome','motoristaNome','moto','motoristaPos','passageiroPos','criadoEm','expira'])
@@ -86,6 +86,16 @@ service cloud.firestore {
       allow delete: if request.auth != null && (admin() || resource.data.passageiroUid == request.auth.uid
         || (ehMotorista()
           && get(/databases/$(database)/documents/chamados/$(resource.data.chamadoId)).data.get("motoristaId", "") == request.auth.uid));
+    }
+    match /alertas/{aid} {
+      allow read: if request.auth != null && (admin() || resource.data.passageiroUid == request.auth.uid);
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['chamadoId','passageiroUid','passageiroNome','motoristaId','motoristaNome','moto','destino','valor','iniciada','passageiroPos','motoristaPos','codigo','criadoEm','status'])
+        && request.resource.data.passageiroUid == request.auth.uid
+        && request.resource.data.status == "novo"
+        && get(/databases/$(database)/documents/chamados/$(aid)).data.uid == request.auth.uid
+        && get(/databases/$(database)/documents/chamados/$(aid)).data.status == "aceito";
+      allow update, delete: if admin();
     }
     match /propostas/{cid} {
       function propostaOk() {
