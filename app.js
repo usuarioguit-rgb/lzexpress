@@ -375,7 +375,7 @@ function iniciarPainel(user, admin, perfil){
       novos.forEach(c => visVistos.add(c.id)); visInit = true;
     }
     if (!admin && fontes.meus !== undefined && dispOcup !== ocupado) { dispOcup = ocupado; setDoc(doc(db,"disponibilidade",EU.uid), { ocupado }, { merge:true }).catch(() => {}); }
-    const sig = ativos.map(c => c.id + c.status + (c.negociando > Date.now() ? "n" : "")).join(",") + "|" + ocupado;
+    const sig = ativos.map(c => c.id + c.status + (negAtiva(c) ? "n" : "")).join(",") + "|" + ocupado;
     if (leve === true && sig === lastSig) return;
     lastSig = sig;
     $("lista").innerHTML = (admin ? `<div class="resumo">Aguardando: ${ativos.length} · Em andamento agora: ${itens.filter(c => c.status === "aceito").length}</div>` : "") + (ativos.length ? ativos.map(c => {
@@ -387,14 +387,14 @@ function iniciarPainel(user, admin, perfil){
         ${c.referencia ? `<div class="ref">Referência: ${esc(c.referencia)}</div>` : ""}
         ${c.destino ? `<div class="ref">Destino: ${esc(c.destino)}</div>` : ""}
         ${c.valor > 0 ? `<div class="ref">Valor oferecido: ${brl(c.valor)}</div>` : ""}
-        ${esp && c.negociando > Date.now() ? `<div class="ref">${c.negociandoPor === EU.uid ? "Sua proposta aguarda a resposta do passageiro" : "Outro motorista está negociando com o passageiro"}</div>` : ""}
+        ${esp && negAtiva(c) ? `<div class="ref">${c.negociandoPor === EU.uid ? "Sua proposta aguarda a resposta do passageiro" : "Outro motorista está negociando com o passageiro"}</div>` : ""}
         ${c.distKm > 0 ? `<div class="ref">Corrida de ${String(c.distKm).replace(".", ",")} km (~${c.duracaoMin} min) · estimativa ${brl(c.estimativa)}</div>` : ""}
         <div class="acoes">
-          ${c.iniciada ? ((c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${destUrl(c)}">Trajeto até o destino</a>` : "") : ((c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&origin=${c.lat},${c.lng}&destination=${destUrl(c)}">Ver trajeto da corrida</a>` : `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}">Ver localização do passageiro</a>`)}
+          ${c.iniciada ? ((c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${destUrl(c)}">Trajeto até o destino</a>` : "") : `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}">Rota até o passageiro</a>${(c.destLat || c.destino) ? `<a class="b-mapa" target="_blank" href="https://www.google.com/maps/dir/?api=1&origin=${c.lat},${c.lng}&destination=${destUrl(c)}">Ver trajeto da corrida</a>` : ""}`}
           ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
-          ${esp ? (ocupado || admin || c.negociando > Date.now() ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : (c.iniciada ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>` : `<button class="b-ok" data-a="iniciar" data-id="${c.id}">Iniciar corrida</button>`)}
+          ${esp ? (ocupado || admin || negAtiva(c) ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : (c.iniciada ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>` : `<button class="b-ok" data-a="iniciar" data-id="${c.id}">Iniciar corrida</button>`)}
           ${esp && !admin ? `<button class="b-cancel" data-rec="${c.id}">Recusar</button>` : ""}
-          ${esp && !admin && !ocupado && !(c.negociando > Date.now()) && !(c.propostasDe || []).includes(EU.uid) ? `<button class="b-esp" data-prop="${c.id}" data-uid="${c.uid}" data-valor="${c.valor || 0}" style="grid-column:1/3">Propor outro valor</button>` : ""}
+          ${esp && !admin && !ocupado && !negAtiva(c) && !(c.propostasDe || []).includes(EU.uid) ? `<button class="b-esp" data-prop="${c.id}" data-uid="${c.uid}" data-valor="${c.valor || 0}" style="grid-column:1/3">Propor outro valor</button>` : ""}
           ${!esp && meu && !c.iniciada ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
         </div></div>`;
@@ -515,15 +515,15 @@ function iniciarPainel(user, admin, perfil){
 
   let mots = [], cont = {}, acum = {}, disp = {};
   let alertas = [], alertasPronto = false;
-  const mapaLink = p => p ? "https://www.google.com/maps/search/?api=1&query=" + p.lat + "," + p.lng : "";
   const desenharAlertas = () => {
     const novos = alertas.filter(a => a.status === "novo").sort((a,b) => seg(b) - seg(a));
     $("alertas-sos").innerHTML = novos.map(a => {
       const m = a.moto || {}, mot = mots.find(x => x.id === a.motoristaId) || {};
-      const ch = todosItens.find(x => x.id === a.chamadoId), mp = (ch && ch.motoristaPos) || a.motoristaPos, pp = a.passageiroPos;
+      const nasc = mot.nascimento || m.nascimento;
       return `<div class="alerta"><h3>ALERTA SOS · ${esc(a.passageiroNome)}</h3>
-        <div class="info">${fmt(a.criadoEm)}${a.iniciada ? " · corrida iniciada" : " · motorista a caminho"}<br>Motorista: <b>${esc(m.nomeCompleto || a.motoristaNome || "—")}</b> · nascimento ${esc(m.nascimento ? m.nascimento.split("-").reverse().join("/") : "—")}<br>WhatsApp do motorista: ${esc(mot.telefone || "—")}<br>Moto: ${esc(m.modelo || "—")} · ${esc(m.cor || "—")} · placa <b>${esc(m.placa || "—")}</b><br>Destino: ${esc(a.destino || "—")}</div>
-        <div class="acoes">${pp ? `<a class="b-mapa" target="_blank" href="${mapaLink(pp)}">Onde está o passageiro</a>` : ""}${mp ? `<a class="b-mapa" target="_blank" href="${mapaLink(mp)}">Onde está a moto</a>` : ""}${mot.telefone ? `<a class="b-zap" target="_blank" href="https://wa.me/${tel55(mot.telefone)}">WhatsApp do motorista</a>` : ""}<button class="b-ok" data-alerta="${a.id}" style="grid-column:1/3">Marcar como resolvido</button></div></div>`;
+        <div class="info">${fmt(a.criadoEm)}${a.iniciada ? " · corrida iniciada" : " · motorista a caminho"}<br>Destino: ${esc(a.destino || "—")}</div>
+        <div class="info"><b>Motorista da corrida</b><br>Nome completo: <b>${esc(mot.nome || m.nomeCompleto || a.motoristaNome || "—")}</b><br>Data de nascimento: ${esc(nasc ? nasc.split("-").reverse().join("/") : "—")}<br>WhatsApp: ${esc(mot.telefone || "—")}<br>E-mail: ${esc(mot.email || "—")}<br>Moto: ${esc(mot.modelo || m.modelo || "—")} · ${esc(mot.cor || m.cor || "—")}<br>Placa: <b>${esc(mot.placa || m.placa || "—")}</b></div>
+        <div class="acoes">${mot.telefone ? `<a class="b-zap" target="_blank" href="https://wa.me/${tel55(mot.telefone)}">WhatsApp do motorista</a>` : ""}<button class="b-ok" data-alerta="${a.id}"${mot.telefone ? "" : ' style="grid-column:1/3"'}>Marcar como resolvido</button></div></div>`;
     }).join("");
   };
   unsubs.push(onSnapshot(collection(db,"alertas"), snap => {
@@ -740,7 +740,7 @@ $("parc-enviar").onclick = async () => {
   try {
     const nomeS = $("parc-nome").value.trim(), foneS = $("parc-fone").value.trim();
     if (!nomeS || foneS.replace(/\D/g,"").length < 10) { alert("Preencha seu nome e seu WhatsApp com DDD."); $("parc-enviar").disabled = false; return; }
-    await setDoc(doc(db,"solicitacoes",u.uid), { nome:nomeS, telefone:foneS, email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"2.2", criadoEm:serverTimestamp() });
+    await setDoc(doc(db,"solicitacoes",u.uid), { nome:nomeS, telefone:foneS, email:u.email, status:"pendente", aceiteEm:serverTimestamp(), versaoTermos:"2.3", criadoEm:serverTimestamp() });
     $("parc-aceite").checked = false;
   } catch { alert("Não foi possível enviar. Tente de novo."); }
   $("parc-enviar").disabled = !$("parc-aceite").checked;
@@ -749,7 +749,9 @@ $("btn-pagar").onclick = () => abrirPix("Leandro Vanzeler · Mercado Pago", mont
   "Pague " + brl(PLANO.valor) + " e avise o administrador. Ele libera seu acesso depois de conferir o pagamento.", zapLink("Paguei a mensalidade do LZ EXPRESS."));
 
 /* ---------- Avaliação e localização do motorista ---------- */
-const propostaAtiva = () => !!(propostaAtual && propostaAtual.expiraEm > Date.now());
+const expMs = p => (p.criadoEm ? p.criadoEm.toMillis() : Date.now()) + 60000;
+const negAtiva = c => ("negociandoEm" in c) && (c.negociandoEm === null || c.negociandoEm.toMillis() + 60000 > Date.now());
+const propostaAtiva = () => !!(propostaAtual && expMs(propostaAtual) > Date.now());
 function atualizarContraUI(){
   const mostrar = !!(ultCli && ultCli.status === "aguardando" && propostaAtiva());
   $("contra-btns").classList.toggle("hidden", !mostrar);
@@ -763,14 +765,14 @@ function monitorarProposta(id){
   propUnsub = onSnapshot(doc(db,"propostas",id), d => {
     propostaAtual = d.exists() ? d.data() : null;
     clearTimeout(tProp);
-    if (propostaAtual) tProp = setTimeout(() => { atualizarContraUI(); repintarStatus(); }, Math.max(0, propostaAtual.expiraEm - Date.now()) + 300);
+    if (propostaAtual) tProp = setTimeout(() => { atualizarContraUI(); repintarStatus(); }, Math.max(0, expMs(propostaAtual) - Date.now()) + 300);
     atualizarContraUI(); repintarStatus();
   }, () => {});
 }
 function recusarProposta(){
   const c = ultCli; if (!c) return;
   const lote = writeBatch(db);
-  lote.update(doc(db,"chamados",c.id), { negociando:deleteField(), negociandoPor:deleteField() });
+  lote.update(doc(db,"chamados",c.id), { negociandoEm:deleteField(), negociandoPor:deleteField() });
   lote.delete(doc(db,"propostas",c.id));
   lote.commit().catch(() => alert("Não foi possível responder à proposta."));
 }
@@ -778,7 +780,7 @@ $("btn-contra-ok").onclick = async () => {
   const c = ultCli, p = propostaAtual; if (!c || !p || !propostaAtiva()) return;
   if (!livresIds.includes(p.motoristaId)) { alert("O motorista ficou ocupado. O seu chamado continua aberto para os outros motoristas."); recusarProposta(); return; }
   const lote = writeBatch(db);
-  lote.update(doc(db,"chamados",c.id), { status:"aceito", motoristaId:p.motoristaId, motoristaNome:p.motoristaNome, moto:p.moto || null, valor:p.valor, aceitoEm:serverTimestamp(), viaProposta:true, negociando:deleteField(), negociandoPor:deleteField() });
+  lote.update(doc(db,"chamados",c.id), { status:"aceito", motoristaId:p.motoristaId, motoristaNome:p.motoristaNome, moto:p.moto || null, valor:p.valor, aceitoEm:serverTimestamp(), viaProposta:true, negociandoEm:deleteField(), negociandoPor:deleteField() });
   lote.delete(doc(db,"propostas",c.id));
   try { await lote.commit(); } catch { alert("Não foi possível fechar a corrida. O motorista pode ter ficado ocupado."); }
 };
@@ -853,13 +855,13 @@ $("prop-enviar").onclick = () => {
   const v = parseFloat(String($("prop-valor").value).replace(",", "."));
   if (!(v >= 1 && v <= 500)) { $("prop-erro").textContent = "Digite um valor entre R$ 1 e R$ 500."; return; }
   if (!propSel || !EU) return;
-  const { id, uidPass } = propSel, exp = Date.now() + 60000, lote = writeBatch(db);
-  lote.update(doc(db,"chamados",id), { negociando:exp, negociandoPor:EU.uid, propostasDe:arrayUnion(EU.uid) });
-  lote.set(doc(db,"propostas",id), { valor:Math.round(v * 100) / 100, motoristaId:EU.uid, motoristaNome:EU.nome, moto:EU.moto, passageiroUid:uidPass, expiraEm:exp, criadoEm:serverTimestamp() });
+  const { id, uidPass } = propSel, lote = writeBatch(db);
+  lote.update(doc(db,"chamados",id), { negociandoEm:serverTimestamp(), negociandoPor:EU.uid, propostasDe:arrayUnion(EU.uid) });
+  lote.set(doc(db,"propostas",id), { valor:Math.round(v * 100) / 100, motoristaId:EU.uid, motoristaNome:EU.nome, moto:EU.moto, passageiroUid:uidPass, criadoEm:serverTimestamp() });
   $("prop-enviar").disabled = true;
   lote.commit()
     .then(() => { $("prop-tela").classList.add("hidden"); alert("Proposta enviada! O passageiro tem 60 segundos para responder. Se ele aceitar, a corrida aparece para você."); })
-    .catch(() => { $("prop-erro").textContent = "Não foi possível enviar. Outro motorista pode estar negociando."; })
+    .catch(e => { $("prop-erro").textContent = "Não foi possível enviar a proposta (" + (e.code || "erro") + ")." + (e.code === "permission-denied" ? " Outro motorista pode estar negociando, ou você já propôs neste chamado." : ""); })
     .finally(() => { $("prop-enviar").disabled = false; });
 };
 const limpando = new Set();
@@ -946,15 +948,16 @@ $("sos-zap").onclick = async () => {
     if (!window.open(url, "_blank")) location.href = url;
   } finally { criandoShare = false; }
 };
+const avisoAlerta = (tit, msg) => { $("alerta-ok-tit").textContent = tit; $("alerta-ok-msg").textContent = msg; $("alerta-ok-tela").classList.remove("hidden"); };
+$("alerta-ok-fechar").onclick = () => $("alerta-ok-tela").classList.add("hidden");
 $("sos-alerta").onclick = async () => {
   const c = ultCli; if (!c || c.status !== "aceito") return;
+  $("sos-tela").classList.add("hidden");
   try {
-    if ((await getDoc(doc(db,"alertas",c.id))).exists()) { alert("O alerta desta corrida já foi enviado ao administrador. Se estiver em perigo, ligue 190."); return; }
-    const pos = await new Promise(res => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => res({ lat:p.coords.latitude, lng:p.coords.longitude, t:Date.now() }), () => res(null), { enableHighAccuracy:true, timeout:8000 }) : res(null));
-    await setDoc(doc(db,"alertas",c.id), { chamadoId:c.id, passageiroUid:auth.currentUser.uid, passageiroNome:nomeDe(auth.currentUser) || "Passageiro", motoristaId:c.motoristaId || "", motoristaNome:c.motoristaNome || "", moto:c.moto || null, destino:c.destino || "", valor:c.valor || 0, iniciada:!!c.iniciada, passageiroPos:pos, motoristaPos:c.motoristaPos || null, codigo:shareCod || "", criadoEm:serverTimestamp(), status:"novo" });
-    $("sos-tela").classList.add("hidden");
-    alert("Alerta enviado ao administrador. Se estiver em perigo, ligue 190.");
-  } catch { alert("Não foi possível enviar o alerta. Se estiver em perigo, ligue 190."); }
+    if ((await getDoc(doc(db,"alertas",c.id))).exists()) { avisoAlerta("Alerta já enviado", "O administrador já recebeu o alerta desta corrida. Se estiver em perigo, ligue 190."); return; }
+    await setDoc(doc(db,"alertas",c.id), { chamadoId:c.id, passageiroUid:auth.currentUser.uid, passageiroNome:nomeDe(auth.currentUser) || "Passageiro", motoristaId:c.motoristaId || "", motoristaNome:c.motoristaNome || "", moto:c.moto || null, destino:c.destino || "", valor:c.valor || 0, iniciada:!!c.iniciada, codigo:shareCod || "", criadoEm:serverTimestamp(), status:"novo" });
+    avisoAlerta("Alerta enviado", "O administrador recebeu o seu alerta, com os dados do motorista que está fazendo a corrida. Se estiver em perigo, ligue 190.");
+  } catch (e) { avisoAlerta("Não foi possível enviar", "O alerta não foi enviado (" + (e.code || "erro") + "). Se estiver em perigo, ligue 190."); }
 };
 
 /* ---------- Status dos motoristas sempre em dia ---------- */

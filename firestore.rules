@@ -88,7 +88,7 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/chamados/$(resource.data.chamadoId)).data.get("motoristaId", "") == request.auth.uid));
     }
     match /alertas/{aid} {
-      allow read: if request.auth != null && (admin() || resource.data.passageiroUid == request.auth.uid);
+      allow read: if request.auth != null && (resource == null || admin() || resource.data.passageiroUid == request.auth.uid);
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['chamadoId','passageiroUid','passageiroNome','motoristaId','motoristaNome','moto','destino','valor','iniciada','passageiroPos','motoristaPos','codigo','criadoEm','status'])
         && request.resource.data.passageiroUid == request.auth.uid
@@ -100,7 +100,8 @@ service cloud.firestore {
     match /propostas/{cid} {
       function propostaOk() {
         return request.auth != null && ehMotorista()
-          && request.resource.data.keys().hasOnly(['valor','motoristaId','motoristaNome','moto','passageiroUid','expiraEm','criadoEm'])
+          && request.resource.data.keys().hasOnly(['valor','motoristaId','motoristaNome','moto','passageiroUid','criadoEm'])
+          && request.resource.data.criadoEm == request.time
           && request.resource.data.motoristaId == request.auth.uid
           && request.resource.data.valor is number && request.resource.data.valor >= 1 && request.resource.data.valor <= 500
           && request.resource.data.passageiroUid == get(/databases/$(database)/documents/chamados/$(cid)).data.uid
@@ -108,7 +109,7 @@ service cloud.firestore {
       }
       allow read: if request.auth != null && (resource == null || admin() || resource.data.passageiroUid == request.auth.uid || resource.data.motoristaId == request.auth.uid);
       allow create: if propostaOk();
-      allow update: if propostaOk() && resource.data.expiraEm < request.time.toMillis();
+      allow update: if propostaOk() && resource.data.criadoEm + duration.value(60, "s") <= request.time;
       allow delete: if request.auth != null && (admin() || resource.data.passageiroUid == request.auth.uid || resource.data.motoristaId == request.auth.uid);
     }
     match /chamados/{id} {
@@ -156,7 +157,7 @@ service cloud.firestore {
         || (ehMotorista() && resource.data.status == "aguardando"
             && request.resource.data.status == "aceito"
             && request.resource.data.motoristaId == request.auth.uid
-            && resource.data.get("negociando", 0) <= request.time.toMillis())
+            && resource.data.get("negociandoEm", timestamp.value(0)) + duration.value(60, "s") <= request.time)
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid
             && request.resource.data.status == "finalizado")
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid && resource.data.status == "aceito"
@@ -166,26 +167,25 @@ service cloud.firestore {
         || (ehMotorista() && resource.data.status == "aguardando" && request.resource.data.status == "aguardando"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['recusas']))
         || (ehMotorista() && resource.data.status == "aguardando" && request.resource.data.status == "aguardando"
-            && resource.data.get("negociando", 0) <= request.time.toMillis()
+            && resource.data.get("negociandoEm", timestamp.value(0)) + duration.value(60, "s") <= request.time
             && !(request.auth.uid in resource.data.get("propostasDe", []))
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['negociando','negociandoPor','propostasDe'])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['negociandoEm','negociandoPor','propostasDe'])
             && request.resource.data.negociandoPor == request.auth.uid
-            && request.resource.data.negociando > request.time.toMillis()
-            && request.resource.data.negociando <= request.time.toMillis() + 90000)
+            && request.resource.data.negociandoEm == request.time)
         || (ehMotorista() && resource.data.motoristaId == request.auth.uid && resource.data.status == "aceito"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['contagemFeita']))
         || (resource.data.uid == request.auth.uid && resource.data.status == "aguardando"
             && exists(/databases/$(database)/documents/propostas/$(id))
             && get(/databases/$(database)/documents/propostas/$(id)).data.passageiroUid == request.auth.uid
-            && get(/databases/$(database)/documents/propostas/$(id)).data.expiraEm > request.time.toMillis()
+            && get(/databases/$(database)/documents/propostas/$(id)).data.criadoEm + duration.value(60, "s") > request.time
             && request.resource.data.status == "aceito"
             && request.resource.data.motoristaId == get(/databases/$(database)/documents/propostas/$(id)).data.motoristaId
             && request.resource.data.valor == get(/databases/$(database)/documents/propostas/$(id)).data.valor
             && get(/databases/$(database)/documents/disponibilidade/$(get(/databases/$(database)/documents/propostas/$(id)).data.motoristaId)).data.get("ocupado", false) == false
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','motoristaId','motoristaNome','moto','valor','aceitoEm','viaProposta','negociando','negociandoPor']))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','motoristaId','motoristaNome','moto','valor','aceitoEm','viaProposta','negociandoEm','negociandoPor']))
         || (resource.data.uid == request.auth.uid && resource.data.status == "aguardando" && request.resource.data.status == "aguardando"
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['negociando','negociandoPor'])
-            && !("negociando" in request.resource.data) && !("negociandoPor" in request.resource.data))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['negociandoEm','negociandoPor'])
+            && !("negociandoEm" in request.resource.data) && !("negociandoPor" in request.resource.data))
         || (resource.data.uid == request.auth.uid && resource.data.status == "aceito"
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['compartilhamento']))
         || (resource.data.uid == request.auth.uid && request.resource.data.status == "cancelado"
