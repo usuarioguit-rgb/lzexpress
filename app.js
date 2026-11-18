@@ -752,10 +752,17 @@ $("btn-pagar").onclick = () => abrirPix("Leandro Vanzeler · Mercado Pago", mont
 const expMs = p => (p.criadoEm ? p.criadoEm.toMillis() : Date.now()) + 60000;
 const negAtiva = c => ("negociandoEm" in c) && (c.negociandoEm === null || c.negociandoEm.toMillis() + 60000 > Date.now());
 const propostaAtiva = () => !!(propostaAtual && expMs(propostaAtual) > Date.now());
+let contraAvisada = null;
 function atualizarContraUI(){
   const mostrar = !!(ultCli && ultCli.status === "aguardando" && propostaAtiva());
   $("contra-btns").classList.toggle("hidden", !mostrar);
-  if (mostrar) $("btn-contra-ok").textContent = "Aceitar " + brl(propostaAtual.valor);
+  $("contra-tela").classList.toggle("hidden", !mostrar);
+  if (!mostrar) return;
+  const rotulo = "Aceitar " + brl(propostaAtual.valor);
+  $("btn-contra-ok").textContent = rotulo; $("contra-aceitar").textContent = rotulo;
+  $("contra-texto").textContent = (propostaAtual.motoristaNome || "O motorista") + " propôs " + brl(propostaAtual.valor) + " para esta corrida (você ofereceu " + (ultCli.valor > 0 ? brl(ultCli.valor) : "nenhum valor") + "). Você aceita?";
+  const k = ultCli.id + "|" + propostaAtual.valor + "|" + (propostaAtual.criadoEm ? propostaAtual.criadoEm.toMillis() : 0);
+  if (contraAvisada !== k) { contraAvisada = k; beep(); }
 }
 function monitorarProposta(id){
   if (id === propId) return;
@@ -785,6 +792,8 @@ $("btn-contra-ok").onclick = async () => {
   try { await lote.commit(); } catch { alert("Não foi possível fechar a corrida. O motorista pode ter ficado ocupado."); }
 };
 $("btn-contra-no").onclick = recusarProposta;
+$("contra-aceitar").onclick = () => $("btn-contra-ok").click();
+$("contra-recusar").onclick = () => recusarProposta();
 $("estrelas").onclick = async e => {
   const b = e.target.closest("button[data-n]"); if (!b || !notaId) return;
   const id = notaId; notaId = null; $("nota-tela").classList.add("hidden"); atualizarBotaoGlobal();
@@ -851,18 +860,27 @@ function proporValor(id, atual, uidPass){
   $("prop-tela").classList.remove("hidden");
 }
 $("prop-voltar").onclick = () => $("prop-tela").classList.add("hidden");
-$("prop-enviar").onclick = () => {
+$("prop-enviar").onclick = async () => {
   const v = parseFloat(String($("prop-valor").value).replace(",", "."));
   if (!(v >= 1 && v <= 500)) { $("prop-erro").textContent = "Digite um valor entre R$ 1 e R$ 500."; return; }
   if (!propSel || !EU) return;
-  const { id, uidPass } = propSel, lote = writeBatch(db);
-  lote.update(doc(db,"chamados",id), { negociandoEm:serverTimestamp(), negociandoPor:EU.uid, propostasDe:arrayUnion(EU.uid) });
-  lote.set(doc(db,"propostas",id), { valor:Math.round(v * 100) / 100, motoristaId:EU.uid, motoristaNome:EU.nome, moto:EU.moto, passageiroUid:uidPass, criadoEm:serverTimestamp() });
-  $("prop-enviar").disabled = true;
-  lote.commit()
-    .then(() => { $("prop-tela").classList.add("hidden"); alert("Proposta enviada! O passageiro tem 60 segundos para responder. Se ele aceitar, a corrida aparece para você."); })
-    .catch(e => { $("prop-erro").textContent = "Não foi possível enviar a proposta (" + (e.code || "erro") + ")." + (e.code === "permission-denied" ? " Outro motorista pode estar negociando, ou você já propôs neste chamado." : ""); })
-    .finally(() => { $("prop-enviar").disabled = false; });
+  const { id, uidPass } = propSel;
+  $("prop-enviar").disabled = true; $("prop-erro").textContent = "";
+  try {
+    // Passo 1: a proposta em si (é isso que aparece na tela do passageiro)
+    await setDoc(doc(db,"propostas",id), { valor:Math.round(v * 100) / 100, motoristaId:EU.uid, motoristaNome:EU.nome || "", moto:EU.moto || null, passageiroUid:uidPass, criadoEm:serverTimestamp() });
+  } catch (e) {
+    const cod = e.code || "erro";
+    $("prop-erro").textContent = cod === "permission-denied"
+      ? "Não foi possível enviar (permission-denied). Já existe uma proposta aguardando resposta neste chamado (espere 60 s), ou o chamado não está mais aguardando, ou o plano está vencido."
+      : "Não foi possível enviar a proposta (" + cod + ").";
+    $("prop-enviar").disabled = false; return;
+  }
+  // Passo 2 (opcional): marca o chamado como "em negociação" para os outros motoristas. Se falhar, a proposta já foi enviada.
+  updateDoc(doc(db,"chamados",id), { negociandoEm:serverTimestamp(), negociandoPor:EU.uid, propostasDe:arrayUnion(EU.uid) }).catch(() => {});
+  $("prop-tela").classList.add("hidden");
+  alert("Proposta enviada! O passageiro tem 60 segundos para responder. Se ele aceitar, a corrida aparece para você.");
+  $("prop-enviar").disabled = false;
 };
 const limpando = new Set();
 async function limparAntigos(itens){
