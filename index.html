@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
 
@@ -209,6 +209,21 @@
   <button id="share-fechar" class="btn neutro" type="button">Fechar</button>
 </div></div>
 
+<div id="prop-ok-tela" class="pix hidden"><div class="pix-card">
+  <div class="ov-ico ov-azul"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></div>
+  <h2>Proposta enviada!</h2>
+  <p class="sub">O passageiro tem <b>60 segundos</b> para responder. Se ele aceitar, a corrida aparece para você.</p>
+  <button id="prop-ok-fechar" class="btn principal" type="button">Entendi</button>
+</div></div>
+
+<div id="loc-av-tela" class="pix hidden"><div class="pix-card">
+  <div class="ov-ico"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
+  <h2 id="loc-av-tit">Permita a sua localização</h2>
+  <p id="loc-av-txt" class="sub"></p>
+  <button id="loc-av-ok" class="btn principal" type="button">Entendi, vamos lá</button>
+  <button id="loc-av-fechar" class="btn neutro" type="button">Agora não</button>
+</div></div>
+
 <div id="chat-tela" class="chat hidden"><div class="chat-card">
   <div class="chat-topo"><b id="chat-titulo">Conversa</b><button id="chat-fechar" type="button">Fechar</button></div>
   <div id="chat-msgs" class="chat-msgs"></div>
@@ -231,6 +246,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=30"></script>
+<script type="module" src="app.js?v=31"></script>
 </body>
 </html>

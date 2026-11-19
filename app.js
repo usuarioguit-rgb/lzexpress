@@ -226,6 +226,7 @@ function iniciarCliente(user){
       if (!(nv >= 1 && nv <= 500)) { alert("Digite quanto você quer pagar (de R$ 1 a R$ 500)."); $("valor").focus(); return; }
     }
     if (!navigator.geolocation) { alert("Seu celular não permite localização."); return; }
+    { const est = await estadoLoc(); if (est !== "granted" && !(est === "unknown" && locExplicada)) { locExplicada = true; if (!(await mostrarLocAviso(est === "denied"))) return; } }
     btn.disabled = true;
     navigator.geolocation.getCurrentPosition(async pos => {
       if (!dentro(pos.coords.latitude, pos.coords.longitude)) { btn.disabled = false; alert("O LZ EXPRESS atende somente em Cametá (PA)."); return; }
@@ -635,6 +636,26 @@ $("lista").addEventListener("click", e => {
   if (gpsCod) deleteDoc(doc(db,"compartilhamentos",gpsCod)).catch(() => {});
   abaMot("hist");
 });
+// ---- Telas novas: proposta enviada e pedido de localização ----
+$("prop-ok-fechar").onclick = () => $("prop-ok-tela").classList.add("hidden");
+let locExplicada = false;
+async function estadoLoc(){
+  try { if (navigator.permissions) return (await navigator.permissions.query({ name:"geolocation" })).state; } catch {}
+  return "unknown";
+}
+function mostrarLocAviso(negada){
+  return new Promise(res => {
+    $("loc-av-tit").textContent = negada ? "Localização bloqueada" : "Permita a sua localização";
+    $("loc-av-txt").innerHTML = negada
+      ? "A localização está bloqueada neste celular, e sem ela o motorista não consegue te encontrar.<br><br>Libere a localização do LZ EXPRESS nas configurações do celular ou do navegador e tente de novo."
+      : "Para o motorista chegar até você, o celular vai pedir a sua localização.<br><br>Quando aparecer a pergunta, toque em <b>“Permitir”</b>.";
+    $("loc-av-ok").textContent = negada ? "Tentar de novo" : "Entendi, vamos lá";
+    const fim = v => { $("loc-av-tela").classList.add("hidden"); res(v); };
+    $("loc-av-ok").onclick = () => fim(true);
+    $("loc-av-fechar").onclick = () => fim(false);
+    $("loc-av-tela").classList.remove("hidden");
+  });
+}
 // ---- Valores rápidos (R$ 5, 7, 10 ou Negociar) ----
 function resetValores(){
   [...$("valores").children].forEach(x => x.classList.toggle("on", x.dataset.v === "10"));
@@ -954,7 +975,7 @@ $("prop-enviar").onclick = async () => {
   // Passo 2 (opcional): marca o chamado como "em negociação" para os outros motoristas. Se falhar, a proposta já foi enviada.
   updateDoc(doc(db,"chamados",id), { negociandoEm:serverTimestamp(), negociandoPor:EU.uid, propostasDe:arrayUnion(EU.uid) }).catch(() => {});
   $("prop-tela").classList.add("hidden");
-  alert("Proposta enviada! O passageiro tem 60 segundos para responder. Se ele aceitar, a corrida aparece para você.");
+  $("prop-ok-tela").classList.remove("hidden");
   $("prop-enviar").disabled = false;
 };
 const limpando = new Set();

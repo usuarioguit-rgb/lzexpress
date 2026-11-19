@@ -325,3 +325,12 @@ a.btn.secundario{display:block;text-align:center;text-decoration:none}
 #motorista .aba{font-size:16px;padding:14px 4px}
 .chat-rapidas button{font-size:17px;padding:11px 18px}
 #btn-receber-pix{height:68px;font-size:21px;margin:0 0 12px;background:linear-gradient(135deg,#f8da83 0%,#f0a82d 55%,#e8821a 100%);color:#0a1b3a;box-shadow:0 12px 28px rgba(238,138,28,.3)}
+
+/* ===== Telas novas: proposta enviada e pedido de localização ===== */
+.ov-ico{width:68px;height:68px;border-radius:50%;background:#f2c25b;color:#0a1b3a;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+.ov-ico.ov-azul{background:#4d9bff}
+#prop-ok-tela .pix-card,#loc-av-tela .pix-card{text-align:center}
+#prop-ok-tela .sub,#loc-av-tela .sub{color:#b4c3df;font-size:18px;line-height:1.45;margin:8px 0 18px}
+#prop-ok-tela .sub b,#loc-av-tela .sub b{color:#fff}
+#prop-ok-tela .btn,#loc-av-tela .btn{padding:20px;font-size:20px}
+#prop-ok-tela .btn.principal,#loc-av-tela .btn.principal{background:linear-gradient(135deg,#f8da83 0%,#f0a82d 55%,#e8821a 100%);color:#0a1b3a}
