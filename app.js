@@ -166,8 +166,8 @@ function textoStatus(c){
   if (c.status === "aguardando" && dispPronto && onlineN === 0) return ["Nenhum motorista online","No momento não há motoristas online. Você pode cancelar e chamar de novo mais tarde.",""];
   if (c.status === "aguardando" && dispPronto && livresIds.length === 0) return ["Aguarde um pouquinho","Os moto táxis estão ocupados no momento. Aguarde um pouco, assim que um deles ficar livre você será atendido!",""];
   if (c.status === "aguardando" && dispPronto && livresIds.every(id => (c.recusas || []).includes(id))) return ["Sem motorista por enquanto","Os motoristas disponíveis não puderam atender agora. Você pode cancelar e chamar de novo em alguns instantes.",""];
-  if (c.status === "aceito" && c.iniciada) return ["Corrida em andamento", "Você está a caminho do destino" + (c.destino ? ": " + c.destino : "") + "." + (c.valor > 0 ? " Valor combinado: " + brl(c.valor) + "." : ""), "aceito"];
-  if (c.status === "aceito") return ["Moto a caminho! 🏍️", (c.motoristaNome || MOTORISTA_NOME) + " aceitou seu chamado e está indo até você. Fique no local e use o botão abaixo para conversar." + (c.valor > 0 ? " Valor combinado: " + brl(c.valor) + "." : ""),"aceito"];
+  if (c.status === "aceito" && c.iniciada) return ["Corrida em andamento", "Você está a caminho do destino" + (c.destino ? ": " + c.destino : "") + "." + (c.valor > 0 ? " Valor combinado: " + brl(c.valor) + "." : " O valor será combinado ao final da corrida."), "aceito"];
+  if (c.status === "aceito") return ["Moto a caminho! 🏍️", (c.motoristaNome || MOTORISTA_NOME) + " aceitou seu chamado e está indo até você. Fique no local e use o botão abaixo para conversar." + (c.valor > 0 ? " Valor combinado: " + brl(c.valor) + "." : " O valor será combinado ao final da corrida."),"aceito"];
   if (c.status === "cancelado" && MOTIVOS_CLIENTE[c.motivo]) return ["Chamado cancelado", MOTIVOS_CLIENTE[c.motivo], "final"];
   return TEXTOS[c.status] || TEXTOS.aguardando;
 }
@@ -225,6 +225,7 @@ function iniciarCliente(user){
       const nv = parseFloat(String($("valor").value).replace(",", "."));
       if (!(nv >= 1 && nv <= 500)) { alert("Digite quanto você quer pagar (de R$ 1 a R$ 500)."); $("valor").focus(); return; }
     }
+    if (!(parseFloat(String($("valor").value).replace(",", ".")) > 0) && !(await confirmarSemValor())) return;
     if (!navigator.geolocation) { alert("Seu celular não permite localização."); return; }
     { const est = await estadoLoc(); if (est !== "granted" && !(est === "unknown" && locExplicada)) { locExplicada = true; if (!(await mostrarLocAviso(est === "denied"))) return; } }
     btn.disabled = true;
@@ -358,6 +359,7 @@ function iniciarPainel(user, admin, perfil){
     const abertos = c => ["aguardando","aceito"].includes(c.status);
     ocupado = !admin && itens.some(c => c.status === "aceito" && c.motoristaId === EU.uid);
     const meuAtivo = admin ? null : itens.find(c => c.status === "aceito" && c.motoristaId === EU.uid);
+    if (!admin && meuAtivo && meuAtivo.viaProposta && !propJaAvisada(meuAtivo.id)) { propMarcarAvisada(meuAtivo.id); avisarPropAceita(meuAtivo); }
     aoMudarChat = render; monitorarChat(meuAtivo && !meuAtivo.iniciada ? meuAtivo.id : null); seguirGPS(meuAtivo ? meuAtivo.id : null); gpsCod = meuAtivo ? (meuAtivo.compartilhamento || null) : null;
     const agora = Date.now() / 1000;
     const dist = c => posAtual ? km(posAtual.lat, posAtual.lng, c.lat, c.lng) : null;
@@ -392,7 +394,7 @@ function iniciarPainel(user, admin, perfil){
         <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]} ${distTxt(c)}<br>${esp ? "" : "Atendendo: " + esc(c.motoristaNome || "?") + "<br>"}${ve ? (fone ? esc(fone) : (fone === null ? "carregando telefone..." : "")) : (esp ? "Contato pelo chat do app após aceitar" : "")}</div>
         ${c.referencia ? `<div class="ref">Referência: ${esc(c.referencia)}</div>` : ""}
         ${c.destino ? `<div class="ref">Destino: ${esc(c.destino)}</div>` : ""}
-        ${c.valor > 0 ? `<div class="ref">Valor oferecido: ${brl(c.valor)}</div>` : ""}
+        ${c.valor > 0 ? `<div class="ref">Valor oferecido: ${brl(c.valor)}</div>` : `<div class="ref">Valor: a combinar no fim da corrida</div>`}
         ${esp && negAtiva(c) ? `<div class="ref">${c.negociandoPor === EU.uid ? "Sua proposta aguarda a resposta do passageiro" : "Outro motorista está negociando com o passageiro"}</div>` : ""}
         ${c.distKm > 0 ? `<div class="ref">Corrida de ${String(c.distKm).replace(".", ",")} km (~${c.duracaoMin} min) · estimativa ${brl(c.estimativa)}</div>` : ""}
         <div class="acoes">
@@ -636,6 +638,15 @@ $("lista").addEventListener("click", e => {
   if (gpsCod) deleteDoc(doc(db,"compartilhamentos",gpsCod)).catch(() => {});
   abaMot("hist");
 });
+// ---- Aviso ao motorista: o passageiro aceitou a proposta ----
+const propJaAvisada = id => { try { return (JSON.parse(localStorage.getItem("lz-prop-aceita") || "[]")).includes(id); } catch { return false; } };
+const propMarcarAvisada = id => { try { const l = JSON.parse(localStorage.getItem("lz-prop-aceita") || "[]"); l.push(id); localStorage.setItem("lz-prop-aceita", JSON.stringify(l.slice(-40))); } catch {} };
+function avisarPropAceita(c){
+  $("prop-aceita-txt").innerHTML = "<b>" + esc(c.nome || "O passageiro") + "</b> aceitou sua proposta" + (c.valor > 0 ? " de <b>" + brl(c.valor) + "</b>" : "") + ". Vá até o passageiro!";
+  $("prop-aceita-tela").classList.remove("hidden");
+  try { beep(); } catch {}
+}
+$("prop-aceita-fechar").onclick = () => $("prop-aceita-tela").classList.add("hidden");
 // ---- Telas novas: proposta enviada e pedido de localização ----
 $("prop-ok-fechar").onclick = () => $("prop-ok-tela").classList.add("hidden");
 let locExplicada = false;
@@ -645,11 +656,11 @@ async function estadoLoc(){
 }
 function mostrarLocAviso(negada){
   return new Promise(res => {
-    $("loc-av-tit").textContent = negada ? "Localização bloqueada" : "Permita a sua localização";
+    $("loc-av-tit").textContent = negada ? "Localização bloqueada" : "Sua localização";
     $("loc-av-txt").innerHTML = negada
       ? "A localização está bloqueada neste celular, e sem ela o motorista não consegue te encontrar.<br><br>Libere a localização do LZ EXPRESS nas configurações do celular ou do navegador e tente de novo."
-      : "Para o motorista chegar até você, o celular vai pedir a sua localização.<br><br>Quando aparecer a pergunta, toque em <b>“Permitir”</b>.";
-    $("loc-av-ok").textContent = negada ? "Tentar de novo" : "Entendi, vamos lá";
+      : "Para o motorista chegar até você, <b>permita a sua localização</b>.";
+    $("loc-av-ok").textContent = negada ? "Tentar de novo" : "Permitir";
     const fim = v => { $("loc-av-tela").classList.add("hidden"); res(v); };
     $("loc-av-ok").onclick = () => fim(true);
     $("loc-av-fechar").onclick = () => fim(false);
@@ -658,12 +669,13 @@ function mostrarLocAviso(negada){
 }
 // ---- Valores rápidos (R$ 5, 7, 10 ou Negociar) ----
 function resetValores(){
-  [...$("valores").children].forEach(x => x.classList.toggle("on", x.dataset.v === "10"));
-  $("campo-valor").classList.add("hidden"); $("valor").value = "10";
-  const s = document.querySelector("#btn-chamar .s"); if (s) s.textContent = "Você oferece R$ 10,00";
+  [...$("valores").children].forEach(x => x.classList.remove("on"));
+  $("campo-valor").classList.add("hidden"); $("valor").value = "";
+  const s = document.querySelector("#btn-chamar .s"); if (s) s.textContent = "Toque e um motorista vai até você";
 }
 $("valores").addEventListener("click", e => {
   const b = e.target.closest("button[data-v]"); if (!b) return;
+  if (b.classList.contains("on")) { resetValores(); return; }   // tocar de novo desmarca
   [...$("valores").children].forEach(x => x.classList.toggle("on", x === b));
   const neg = b.dataset.v === "n";
   $("campo-valor").classList.toggle("hidden", !neg);
@@ -672,6 +684,13 @@ $("valores").addEventListener("click", e => {
   if (s) s.textContent = neg ? "Você digita quanto quer pagar" : "Você oferece R$ " + b.dataset.v + ",00";
   if (neg) $("valor").focus();
 });
+function confirmarSemValor(){
+  return new Promise(res => {
+    const fim = v => { $("valor-tela").classList.add("hidden"); res(v); };
+    $("valor-ok").onclick = () => fim(true); $("valor-voltar").onclick = () => fim(false);
+    $("valor-tela").classList.remove("hidden");
+  });
+}
 // ---- Aviso de localização só até a pessoa permitir ----
 try { if (navigator.permissions) navigator.permissions.query({ name:"geolocation" }).then(p => { const ap = () => $("dica-loc").classList.toggle("hidden", p.state === "granted"); ap(); p.onchange = ap; }).catch(() => {}); } catch {}
 // ---- Botão único de Pix no histórico do motorista ----

@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 
@@ -72,8 +72,8 @@
       <label for="destino">Para onde vamos?</label>
       <div class="campo"><input id="destino" maxlength="100" placeholder="Ex.: Mix Mateus"></div>
       <label for="valor">Negociar o valor</label>
-      <div id="valores" class="valores"><button type="button" data-v="5">R$ 5</button><button type="button" data-v="7">R$ 7</button><button type="button" data-v="10" class="on">R$ 10</button><button type="button" data-v="n">Negociar</button></div>
-      <div id="campo-valor" class="campo hidden"><span style="color:#f2c25b;font-weight:700">R$</span><input id="valor" inputmode="decimal" maxlength="7" placeholder="Quanto você quer pagar? Ex.: 12" value="10"></div>
+      <div id="valores" class="valores"><button type="button" data-v="5">R$ 5</button><button type="button" data-v="7">R$ 7</button><button type="button" data-v="10">R$ 10</button><button type="button" data-v="n">Negociar</button></div>
+      <div id="campo-valor" class="campo hidden"><span style="color:#f2c25b;font-weight:700">R$</span><input id="valor" inputmode="decimal" maxlength="7" placeholder="Quanto você quer pagar? Ex.: 12" value=""></div>
       <button id="btn-chamar" class="chamar" type="button"><span class="t">CHAMAR MOTO TÁXI</span><span class="s">Toque e um motorista vai até você</span></button>
     </div>
     <div id="st-passos" class="st-passos hidden"></div>
@@ -218,10 +218,25 @@
 
 <div id="loc-av-tela" class="pix hidden"><div class="pix-card">
   <div class="ov-ico"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
-  <h2 id="loc-av-tit">Permita a sua localização</h2>
+  <h2 id="loc-av-tit">Sua localização</h2>
   <p id="loc-av-txt" class="sub"></p>
-  <button id="loc-av-ok" class="btn principal" type="button">Entendi, vamos lá</button>
+  <button id="loc-av-ok" class="btn principal" type="button">Permitir</button>
   <button id="loc-av-fechar" class="btn neutro" type="button">Agora não</button>
+</div></div>
+
+<div id="valor-tela" class="pix hidden"><div class="pix-card">
+  <div class="ov-ico"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></div>
+  <h2>Valor combinado no final</h2>
+  <p class="sub">Você não escolheu um valor. O valor da corrida será <b>negociado quando a corrida terminar</b>: o motorista vai até você, leva você até o destino e cobra o valor da corrida.</p>
+  <button id="valor-ok" class="btn principal" type="button">Entendi, chamar moto táxi</button>
+  <button id="valor-voltar" class="btn neutro" type="button">Voltar e escolher um valor</button>
+</div></div>
+
+<div id="prop-aceita-tela" class="pix hidden"><div class="pix-card">
+  <div class="ov-ico ov-verde"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></div>
+  <h2>O passageiro aceitou!</h2>
+  <p id="prop-aceita-txt" class="sub"></p>
+  <button id="prop-aceita-fechar" class="btn principal" type="button">Ver corrida</button>
 </div></div>
 
 <div id="chat-tela" class="chat hidden"><div class="chat-card">
@@ -246,6 +261,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=31"></script>
+<script type="module" src="app.js?v=33"></script>
 </body>
 </html>
