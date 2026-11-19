@@ -279,3 +279,29 @@ a.btn.secundario{display:block;text-align:center;text-decoration:none}
 #alertas-sos .alerta{background:rgba(220,70,60,.16);border:1.5px solid #ff6b5e;border-radius:18px;padding:16px;margin-bottom:14px}
 #alertas-sos .alerta h3{font-family:'Sora',sans-serif;font-size:17px;color:#ffb4ab;margin-bottom:6px}
 #alertas-sos .info{color:#f5f7fb;font-size:14px;line-height:1.6;margin-bottom:10px}
+
+/* ===== Status do passageiro por cor/estado ===== */
+.st-passos{display:flex;margin:22px 0 12px}
+.st-passos .sp{flex:1;text-align:center;position:relative}
+.st-passos .sp i{display:block;width:12px;height:12px;border-radius:50%;background:#2a4170;margin:0 auto 5px;position:relative;z-index:1}
+.st-passos .sp:not(:first-child):before{content:"";position:absolute;top:5px;right:50%;width:100%;height:2px;background:#2a4170}
+.st-passos .sp.ok i,.st-passos .sp.ok:before{background:var(--bd,#f2c25b)}
+.st-passos .sp span{font-size:12px;color:#8fa3c7}.st-passos .sp.ok span{color:#fff}
+#cliente .status{--bd:#f2c25b;--sbg:#3a3014;--smu:#e6d49a;margin-top:0;background:var(--sbg);border:1.5px solid var(--bd);border-left:6px solid var(--bd);border-radius:18px;box-shadow:none}
+#cliente .status.st-proposta{--bd:#4d9bff;--sbg:#10284d;--smu:#a9c8f2}
+#cliente .status.st-aceito{--bd:#2fbf7a;--sbg:#0f3a2a;--smu:#a6dfc4}
+#cliente .status.st-erro{--bd:#ff6b5e;--sbg:#40181a;--smu:#f0b3ad}
+#cliente .status.st-final{--bd:#8ea2c6;--sbg:#1a2b4a;--smu:#b4c3df}
+.st-passos{--bd:#f2c25b}
+.st-ico{width:40px;height:40px;border-radius:50%;background:var(--bd);color:#0a1b3a;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+#cliente #status-titulo{color:#fff;font-size:21px}
+#cliente #status-texto{color:var(--smu)}
+.st-barra{height:5px;background:rgba(255,255,255,.14);border-radius:3px;margin:12px 0 4px;overflow:hidden}
+.st-barra div{height:100%;width:100%;background:var(--bd);transform-origin:left}
+@keyframes stbarra{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+.st-mot{display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.28);border-radius:14px;padding:12px;margin-top:12px}
+.st-av{width:42px;height:42px;border-radius:50%;background:#f2c25b;color:#0a1b3a;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none}
+.st-mot-t{min-width:0}.st-mot-t b{display:block;color:#fff;font-size:16px}.st-mot-t small{display:block;color:#a9b9d6;font-size:13px;margin-top:2px}
+.st-placa{margin-left:auto;background:#fff;color:#0a1b3a;font-weight:800;font-size:15px;letter-spacing:2px;padding:4px 9px;border-radius:7px;border:2px solid #f2c25b;flex:none}
+#cliente #status .btn.principal{background:var(--bd);color:#0a1b3a}
+#cliente #status .btn.neutro{background:transparent;color:var(--bd);border:1.5px solid var(--bd)}

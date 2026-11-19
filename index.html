@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 
@@ -75,12 +75,16 @@
       <div class="campo"><span style="color:#f2c25b;font-weight:700">R$</span><input id="valor" inputmode="decimal" maxlength="7" placeholder="Ex.: 10"></div>
       <button id="btn-chamar" class="chamar" type="button"><span class="t">CHAMAR MOTO TÁXI</span><span class="s">Toque e um motorista vai até você</span></button>
     </div>
+    <div id="st-passos" class="st-passos hidden"></div>
     <div id="status" class="status hidden">
+      <div id="st-ico" class="st-ico"></div>
       <div id="status-titulo"></div><p id="status-texto"></p>
+      <div id="st-barra" class="st-barra hidden"><div id="st-barra-i"></div></div>
+      <div id="st-mot" class="st-mot hidden"><span id="st-av" class="st-av"></span><div class="st-mot-t"><b id="st-mot-nome"></b><small id="st-mot-moto"></small></div><span id="st-placa" class="st-placa hidden"></span></div>
       <div id="contra-btns" class="hidden"><button id="btn-contra-ok" class="btn principal" type="button">Aceitar</button><button id="btn-contra-no" class="btn secundario" type="button">Recusar proposta</button></div>
       <button id="btn-chat-cli" class="btn principal hidden" type="button">💬 Conversar com o motorista</button>
       <button id="btn-loc-cli" class="btn neutro hidden" type="button">Ver onde está o motorista</button>
-      <button id="btn-compartilhar" class="btn neutro hidden" type="button">Compartilhar corrida</button>
+      <button id="btn-compartilhar" class="btn neutro hidden" type="button">Compartilhar trajeto e SOS</button>
       <button id="btn-cancelar" class="btn secundario hidden" type="button">Cancelar chamado</button>
     </div>
     <div class="dica info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><p>Ao chamar, toque em <b>“Permitir”</b> quando o celular pedir sua localização, para o moto táxi chegar até você.</p></div>
@@ -226,6 +230,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=28"></script>
+<script type="module" src="app.js?v=29"></script>
 </body>
 </html>

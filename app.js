@@ -198,10 +198,8 @@ function iniciarCliente(user){
     atualizarContraUI();
     const aceito = ult && ult.status === "aceito" ? ult : null;
     monitorarChat(aceito && !aceito.iniciada ? aceito.id : null);
-    if (!ult) { $("status").classList.add("hidden"); return; }
-    const t = textoStatus(ult);
-    $("status").className = "status " + t[2];
-    $("status-titulo").textContent = t[0]; $("status-texto").textContent = t[1];
+    if (!ult) { $("status").classList.add("hidden"); $("st-passos").classList.add("hidden"); return; }
+    pintarStatus(ult);
     aoMudarChat = () => { const n = naoLidas(); $("btn-chat-cli").textContent = "💬 Conversar com o motorista" + (n ? ` (${n} nova${n > 1 ? "s" : ""})` : ""); };
     aoMudarChat();
     $("btn-chat-cli").classList.toggle("hidden", !aceito || !!aceito.iniciada);
@@ -714,10 +712,59 @@ let propostaAtual = null, tProp = null, propUnsub = null, propId = null;
 let livresIds = [], dispPronto = false, livresN = 0, onlineN = 0, ultCli = null, repintarPainel = () => {}, recusarId = () => {};
 let PLANO = { dias:15, valor:100 }, solicitacao = null, notaId = null, ultCh = null, mapa = null, mkP = null, mkM = null;
 const brl = v => "R$ " + Number(v).toFixed(2).replace(".", ",");
+const ICO_ST = {
+  busca:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  moeda:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5"/>',
+  moto:'<circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M9 17h6M6 14l3-6h4l2 3h3M12 8l-2 4h5"/>',
+  alerta:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
+  ok:'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>'
+};
+const svgSt = k => '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICO_ST[k] + '</svg>';
+const PASSOS_ST = ["Chamado","Motorista","A caminho","Chegou"];
+let barraKey = "";
+function estadoVisual(c){
+  if (c.status === "aguardando") {
+    if (propostaAtiva()) return { cls:"st-proposta", ico:"moeda", passo:1 };
+    if (dispPronto && (onlineN === 0 || (livresIds.length > 0 && livresIds.every(id => (c.recusas || []).includes(id))))) return { cls:"st-erro", ico:"alerta", passo:1 };
+    return { cls:"st-procurando", ico:"busca", passo:1 };
+  }
+  if (c.status === "aceito") return { cls:"st-aceito", ico:"moto", passo:3 };
+  if (c.status === "finalizado") return { cls:"st-aceito", ico:"ok", passo:4 };
+  if (c.status === "cancelado" && MOTIVOS_CLIENTE[c.motivo]) return { cls:"st-erro", ico:"alerta", passo:1 };
+  return { cls:"st-final", ico:"alerta", passo:1 };
+}
+function pintarStatus(c){
+  const t = textoStatus(c), e = estadoVisual(c);
+  $("status").className = "status " + e.cls;
+  $("status-titulo").textContent = t[0]; $("status-texto").textContent = t[1];
+  $("st-ico").innerHTML = svgSt(e.ico);
+  const ps = $("st-passos"); ps.classList.remove("hidden");
+  ps.innerHTML = PASSOS_ST.map((x, j) => '<div class="sp' + (j < e.passo ? ' ok' : '') + '"><i></i><span>' + x + '</span></div>').join("");
+  const prop = c.status === "aguardando" && propostaAtiva();
+  const mot = c.status === "aceito" ? { nome:(c.moto && c.moto.nomeCompleto) || c.motoristaNome || MOTORISTA_NOME, moto:c.moto }
+            : prop ? { nome:(propostaAtual.moto && propostaAtual.moto.nomeCompleto) || propostaAtual.motoristaNome || "Motorista", moto:propostaAtual.moto } : null;
+  $("st-mot").classList.toggle("hidden", !mot);
+  if (mot) {
+    const m = mot.moto || {};
+    $("st-av").textContent = String(mot.nome).split(" ").filter(Boolean).slice(0, 2).map(x => x[0]).join("").toUpperCase();
+    $("st-mot-nome").textContent = mot.nome;
+    $("st-mot-moto").textContent = [m.modelo, m.cor].filter(Boolean).join(" · ") || "Dados da moto não informados";
+    $("st-placa").textContent = m.placa || ""; $("st-placa").classList.toggle("hidden", !m.placa);
+  }
+  $("st-barra").classList.toggle("hidden", !prop);
+  if (prop) {
+    const k = c.id + "|" + propostaAtual.valor + "|" + (propostaAtual.criadoEm ? propostaAtual.criadoEm.toMillis() : 0);
+    if (k !== barraKey) {
+      barraKey = k;
+      const resta = Math.max(0, (expMs(propostaAtual) - Date.now()) / 1000), el = $("st-barra-i");
+      el.style.animation = "none"; void el.offsetWidth;
+      el.style.animation = "stbarra 60s linear forwards"; el.style.animationDelay = "-" + Math.min(60, Math.max(0, 60 - resta)).toFixed(1) + "s";
+    }
+  } else barraKey = "";
+}
 function repintarStatus(){
   if (!ultCli) return;
-  const t = textoStatus(ultCli);
-  $("status").className = "status " + t[2]; $("status-titulo").textContent = t[0]; $("status-texto").textContent = t[1];
+  pintarStatus(ultCli);
 }
 const fmtZap = z => { let d = String(z || "").replace(/\D/g,""); if (d.length > 11 && d.startsWith("55")) d = d.slice(2); return d.length === 11 ? "(" + d.slice(0,2) + ") " + d.slice(2,7) + "-" + d.slice(7) : d; };
 function atualizarPlanoUI(){
