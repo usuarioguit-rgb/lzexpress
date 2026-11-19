@@ -27,8 +27,8 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 let EU = null, cadastrando = null; const fones = {};
-let modoCadastro = false, unsubs = [], audioCtx = null;
-const parar = () => { unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); seguirGPS(null); monitorarProposta(null); pararPassageiro(); aplicarDispGlobal = null; };
+let modoCadastro = false, unsubs = [], audioCtx = null, unsubMinhaProp = null;
+const parar = () => { if (unsubMinhaProp) { unsubMinhaProp(); unsubMinhaProp = null; } unsubs.forEach(f => f()); unsubs = []; monitorarChat(null); seguirGPS(null); monitorarProposta(null); pararPassageiro(); aplicarDispGlobal = null; };
 
 const perfilKey = uid => "lz_perfil_" + uid;
 function nomeDe(user){ try { return JSON.parse(localStorage.getItem(perfilKey(user.uid)) || "{}").nome || user.displayName || ""; } catch { return user.displayName || ""; } }
@@ -402,7 +402,7 @@ function iniciarPainel(user, admin, perfil){
           ${zap ? `<a class="b-zap" target="_blank" href="https://wa.me/${zap.length > 11 ? zap : "55" + zap}">WhatsApp</a>` : ""}
           ${esp ? (ocupado || admin || negAtiva(c) ? "" : `<button class="b-ok" data-a="aceito" data-id="${c.id}">Aceitar</button>`) : (c.iniciada ? `<button class="b-fim" data-a="finalizado" data-id="${c.id}">Finalizar</button>` : `<button class="b-ok" data-a="iniciar" data-id="${c.id}">Iniciar corrida</button>`)}
           ${esp && !admin ? `<button class="b-cancel" data-rec="${c.id}">Recusar</button>` : ""}
-          ${esp && !admin && !ocupado && !negAtiva(c) && !(c.propostasDe || []).includes(EU.uid) ? `<button class="b-esp" data-prop="${c.id}" data-uid="${c.uid}" data-valor="${c.valor || 0}" style="grid-column:1/3">Propor outro valor</button>` : ""}
+          ${esp && !admin && !ocupado && !negAtiva(c) && !(c.propostasDe || []).includes(EU.uid) ? `<button class="b-esp" data-prop="${c.id}" data-uid="${c.uid}" data-nome="${esc(c.nome)}" data-valor="${c.valor || 0}" style="grid-column:1/3">Propor outro valor</button>` : ""}
           ${!esp && meu && !c.iniciada ? `<button class="b-chat" data-chat="${c.id}" data-nome="${esc(c.nome)}">Conversar${chatId === c.id && naoLidas() ? " (" + naoLidas() + ")" : ""}</button>` : ""}
           ${admin && esp ? `<button class="b-esp" data-a="aguardar" data-id="${c.id}" style="grid-column:1/3" ${c.aviso==="aguardar"?"disabled":""}>${c.aviso==="aguardar"?"Cliente avisado para aguardar":"Pedir para aguardar"}</button>` : ""}
         </div></div>`;
@@ -625,7 +625,7 @@ function iniciarPainel(user, admin, perfil){
 }
 
 $("lista").addEventListener("click", e => {
-  const pr = e.target.closest("[data-prop]"); if (pr) { proporValor(pr.dataset.prop, Number(pr.dataset.valor), pr.dataset.uid); return; }
+  const pr = e.target.closest("[data-prop]"); if (pr) { proporValor(pr.dataset.prop, Number(pr.dataset.valor), pr.dataset.uid, pr.dataset.nome); return; }
   const rc = e.target.closest("[data-rec]"); if (rc) { recusarId(rc.dataset.rec); return; }
   const ch = e.target.closest("[data-chat]"); if (ch) { abrirChat(ch.dataset.chat, ch.dataset.nome); return; }
   const b = e.target.closest("button[data-id]"); if (!b) return;
@@ -638,6 +638,26 @@ $("lista").addEventListener("click", e => {
   if (gpsCod) deleteDoc(doc(db,"compartilhamentos",gpsCod)).catch(() => {});
   abaMot("hist");
 });
+// ---- Aviso ao motorista: o passageiro recusou a proposta ----
+function vigiarProposta(id, valor, nome){
+  if (unsubMinhaProp) unsubMinhaProp();
+  let existiu = false;
+  unsubMinhaProp = onSnapshot(doc(db,"propostas",id), async snap => {
+    if (snap.exists()) { existiu = true; return; }
+    if (!existiu) return;
+    if (unsubMinhaProp) { unsubMinhaProp(); unsubMinhaProp = null; }
+    try {
+      const c = await getDoc(doc(db,"chamados",id));
+      if (c.exists() && c.data().status === "aguardando") avisarPropRecusada(nome, valor);
+    } catch {}
+  }, () => {});
+}
+function avisarPropRecusada(nome, valor){
+  $("prop-recusada-txt").innerHTML = "<b>" + esc(nome) + "</b> não aceitou sua proposta de <b>" + brl(valor) + "</b>. O chamado continua aberto.";
+  $("prop-recusada-tela").classList.remove("hidden");
+  try { beep(); } catch {}
+}
+$("prop-recusada-fechar").onclick = () => $("prop-recusada-tela").classList.add("hidden");
 // ---- Aviso ao motorista: o passageiro aceitou a proposta ----
 const propJaAvisada = id => { try { return (JSON.parse(localStorage.getItem("lz-prop-aceita") || "[]")).includes(id); } catch { return false; } };
 const propMarcarAvisada = id => { try { const l = JSON.parse(localStorage.getItem("lz-prop-aceita") || "[]"); l.push(id); localStorage.setItem("lz-prop-aceita", JSON.stringify(l.slice(-40))); } catch {} };
@@ -967,9 +987,9 @@ function registrarAcordo(c){
   lote.commit().catch(() => contandoAcordo.delete(c.id));
 }
 let propSel = null;
-function proporValor(id, atual, uidPass){
+function proporValor(id, atual, uidPass, nome){
   if (!EU) return;
-  propSel = { id, uidPass };
+  propSel = { id, uidPass, nome:nome || "O passageiro" };
   $("prop-oferta").textContent = atual > 0 ? "O passageiro ofereceu " + brl(atual) + "." : "O passageiro não informou um valor.";
   $("prop-valor").value = ""; $("prop-erro").textContent = "";
   $("prop-tela").classList.remove("hidden");
@@ -993,6 +1013,7 @@ $("prop-enviar").onclick = async () => {
   }
   // Passo 2 (opcional): marca o chamado como "em negociação" para os outros motoristas. Se falhar, a proposta já foi enviada.
   updateDoc(doc(db,"chamados",id), { negociandoEm:serverTimestamp(), negociandoPor:EU.uid, propostasDe:arrayUnion(EU.uid) }).catch(() => {});
+  vigiarProposta(id, Math.round(v * 100) / 100, propSel.nome);
   $("prop-tela").classList.add("hidden");
   $("prop-ok-tela").classList.remove("hidden");
   $("prop-enviar").disabled = false;

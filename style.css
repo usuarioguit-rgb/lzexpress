@@ -341,3 +341,10 @@ a.btn.secundario{display:block;text-align:center;text-decoration:none}
 #valor-tela .sub b,#prop-aceita-tela .sub b{color:#fff}
 #valor-tela .btn,#prop-aceita-tela .btn{padding:20px;font-size:20px}
 #valor-tela .btn.principal,#prop-aceita-tela .btn.principal{background:linear-gradient(135deg,#f8da83 0%,#f0a82d 55%,#e8821a 100%);color:#0a1b3a}
+
+.ov-ico.ov-verm{background:#ff6b5e;color:#fff}
+#prop-recusada-tela .pix-card{text-align:center}
+#prop-recusada-tela .sub{color:#b4c3df;font-size:18px;line-height:1.45;margin:8px 0 18px}
+#prop-recusada-tela .sub b{color:#fff}
+#prop-recusada-tela .btn{padding:20px;font-size:20px}
+#prop-recusada-tela .btn.principal{background:linear-gradient(135deg,#f8da83 0%,#f0a82d 55%,#e8821a 100%);color:#0a1b3a}
