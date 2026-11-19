@@ -47,16 +47,19 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || admin());
       allow create: if request.auth != null && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['nome','telefone','email','criadoEm','ultimoChamado'])
+        && request.resource.data.keys().hasOnly(['nome','telefone','email','criadoEm','ultimoChamado','chamadoAnterior'])
         && request.resource.data.get("ultimoChamado", request.time) == request.time
+        && !("chamadoAnterior" in request.resource.data)
         && request.resource.data.get("nome", "").size() <= 80
         && request.resource.data.get("telefone", "").size() <= 25;
       allow update: if request.auth != null && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['nome','telefone','email','criadoEm','ultimoChamado'])
+        && request.resource.data.keys().hasOnly(['nome','telefone','email','criadoEm','ultimoChamado','chamadoAnterior'])
         && request.resource.data.get("nome", "").size() <= 80
         && request.resource.data.get("telefone", "").size() <= 25
-        && (request.resource.data.get("ultimoChamado", null) == resource.data.get("ultimoChamado", null)
-            || request.resource.data.get("ultimoChamado", null) == request.time);
+        && ((request.resource.data.get("ultimoChamado", null) == resource.data.get("ultimoChamado", null)
+              && request.resource.data.get("chamadoAnterior", null) == resource.data.get("chamadoAnterior", null))
+            || (request.resource.data.get("ultimoChamado", null) == request.time
+              && request.resource.data.get("chamadoAnterior", null) == resource.data.get("ultimoChamado", null)));
       allow delete: if admin();
     }
     match /contatos/{id} {
@@ -149,7 +152,7 @@ service cloud.firestore {
         && request.resource.data.lng >= -49.70 && request.resource.data.lng <= -49.30
         && request.resource.data.lng is number
         && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            || request.time > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("ultimoChamado", timestamp.value(0)) + duration.value(60, "s"))
+            || request.time > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("chamadoAnterior", timestamp.value(0)) + duration.value(60, "s"))
         && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("ultimoChamado", null) == request.time;
       allow read: if request.auth != null && (admin() || resource.data.uid == request.auth.uid
         || (ehMotorista() && (resource.data.status == "aguardando" || resource.data.motoristaId == request.auth.uid)));

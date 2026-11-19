@@ -236,11 +236,14 @@ function iniciarCliente(user){
           lat:pos.coords.latitude, lng:pos.coords.longitude, precisao:Math.round(pos.coords.accuracy),
           status:"aguardando", criadoEm:serverTimestamp()
         });
-        lote.set(doc(db,"users",user.uid), { ultimoChamado:serverTimestamp() }, { merge:true });
+        // Limite: 2 chamados por minuto. Guardamos o chamado anterior para o Firestore conferir.
+        const marca = { ultimoChamado:serverTimestamp() };
+        try { const us = await getDoc(doc(db,"users",user.uid)); const ant = us.exists() ? us.data().ultimoChamado : null; if (ant) marca.chamadoAnterior = ant; } catch {}
+        lote.set(doc(db,"users",user.uid), marca, { merge:true });
         await lote.commit();
         avisarMotorista((u.nome||"Cliente").split(" ")[0]);
         $("referencia").value = ""; $("destino").value = ""; $("valor").value = "";
-      } catch { alert("Não foi possível enviar o chamado. Espere 1 minuto e tente de novo."); }
+      } catch { alert("Você já fez 2 chamados seguidos. Espere 1 minuto e tente de novo."); }
       btn.disabled = false;
     }, err => {
       btn.disabled = false;
