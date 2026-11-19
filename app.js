@@ -363,7 +363,7 @@ function iniciarPainel(user, admin, perfil){
     aoMudarChat = render; monitorarChat(meuAtivo && !meuAtivo.iniciada ? meuAtivo.id : null); seguirGPS(meuAtivo ? meuAtivo.id : null); gpsCod = meuAtivo ? (meuAtivo.compartilhamento || null) : null;
     const agora = Date.now() / 1000;
     const dist = c => posAtual ? km(posAtual.lat, posAtual.lng, c.lat, c.lng) : null;
-    const atraso = c => { const d = dist(c); return d === null ? 45 : d <= 1 ? 0 : d <= 2 ? 15 : d <= 4 ? 30 : 45; };
+    const atraso = c => { const d = dist(c); return d === null ? 0 : d <= 1 ? 0 : d <= 2 ? 5 : d <= 4 ? 10 : 15; };
     const visivel = c => online && !recusados.has(c.id) && !(c.recusas || []).includes(EU.uid) && c.criadoEm && agora - c.criadoEm.seconds >= atraso(c);
     const distTxt = c => { const d = admin ? null : dist(c); return d === null ? "" : " · a " + (d < 1 ? Math.round(d * 1000) + " m" : d.toFixed(1).replace(".", ",") + " km") + " de você"; };
     const destUrl = c => c.destLat ? c.destLat + "," + c.destLng : encodeURIComponent(c.destino + ", Cametá, PA");
@@ -430,7 +430,7 @@ function iniciarPainel(user, admin, perfil){
   repintarPainel = render;
   recusarId = id => { recusados.add(id); updateDoc(doc(db,"chamados",id), { recusas: arrayUnion(EU.uid) }).catch(() => {}); try { localStorage.setItem("lz_rec", JSON.stringify([...recusados].slice(-100))); } catch {} render(); };
   if (!admin) {
-    const tick = setInterval(() => render(true), 5000); unsubs.push(() => clearInterval(tick));
+    const tick = setInterval(() => render(true), 2000); unsubs.push(() => clearInterval(tick));
     if (navigator.geolocation) {
       const w = navigator.geolocation.watchPosition(p => { posAtual = { lat:p.coords.latitude, lng:p.coords.longitude }; }, () => {}, { enableHighAccuracy:true, maximumAge:15000 });
       unsubs.push(() => navigator.geolocation.clearWatch(w));
