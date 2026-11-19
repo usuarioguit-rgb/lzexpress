@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
 
@@ -72,7 +72,8 @@
       <label for="destino">Para onde vamos?</label>
       <div class="campo"><input id="destino" maxlength="100" placeholder="Ex.: Mix Mateus"></div>
       <label for="valor">Negociar o valor</label>
-      <div class="campo"><span style="color:#f2c25b;font-weight:700">R$</span><input id="valor" inputmode="decimal" maxlength="7" placeholder="Ex.: 10"></div>
+      <div id="valores" class="valores"><button type="button" data-v="5">R$ 5</button><button type="button" data-v="7">R$ 7</button><button type="button" data-v="10" class="on">R$ 10</button><button type="button" data-v="n">Negociar</button></div>
+      <div id="campo-valor" class="campo hidden"><span style="color:#f2c25b;font-weight:700">R$</span><input id="valor" inputmode="decimal" maxlength="7" placeholder="Quanto você quer pagar? Ex.: 12" value="10"></div>
       <button id="btn-chamar" class="chamar" type="button"><span class="t">CHAMAR MOTO TÁXI</span><span class="s">Toque e um motorista vai até você</span></button>
     </div>
     <div id="st-passos" class="st-passos hidden"></div>
@@ -87,7 +88,7 @@
       <button id="btn-compartilhar" class="btn neutro hidden" type="button">Compartilhar trajeto e SOS</button>
       <button id="btn-cancelar" class="btn secundario hidden" type="button">Cancelar chamado</button>
     </div>
-    <div class="dica info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><p>Ao chamar, toque em <b>“Permitir”</b> quando o celular pedir sua localização, para o moto táxi chegar até você.</p></div>
+    <div id="dica-loc" class="dica info"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><p>Ao chamar, toque em <b>“Permitir”</b> quando o celular pedir sua localização, para o moto táxi chegar até você.</p></div>
     <button class="btn neutro" data-share type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.7l6.8-4M8.6 13.3l6.8 4"/></svg>Compartilhar o app</button>
     <div id="bloco-trabalhe" class="trabalhe hidden"><div class="tr-topo"><span class="tr-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a1b3a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-5.4A8 8 0 1 1 21 12z"/></svg></span><div><b>Quer trabalhar com a gente?</b><small>Seja motorista parceiro e receba chamados pelo app.</small></div></div>
       <button id="btn-trabalhe" class="btn" type="button">Saiba mais</button></div>
@@ -124,7 +125,7 @@
       <div id="lista-motoristas" class="hidden"></div>
     </div>
     <div id="hist" class="hidden"><p id="resumo" class="resumo"></p>
-    <button id="btn-apagar" class="btn secundario" type="button">Apagar histórico</button><p id="aviso-apagar" class="dica hidden"></p><div id="lista-hist"></div></div>
+    <button id="btn-receber-pix" class="btn hidden" type="button">Receber por Pix</button><button id="btn-apagar" class="btn secundario" type="button">Apagar histórico</button><p id="aviso-apagar" class="dica hidden"></p><div id="lista-hist"></div></div>
   </main>
 </section>
 
@@ -230,6 +231,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=29"></script>
+<script type="module" src="app.js?v=30"></script>
 </body>
 </html>

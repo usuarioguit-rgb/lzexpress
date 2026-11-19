@@ -221,6 +221,10 @@ function iniciarCliente(user){
   $("btn-cancelar").onclick = () => { if (!ativo) return; updateDoc(doc(db,"chamados",ativo.id), { status:"cancelado" }); deleteDoc(doc(db,"propostas",ativo.id)).catch(() => {}); };
   $("btn-chamar").onclick = async () => {
     const btn = $("btn-chamar");
+    if (!$("campo-valor").classList.contains("hidden")) {
+      const nv = parseFloat(String($("valor").value).replace(",", "."));
+      if (!(nv >= 1 && nv <= 500)) { alert("Digite quanto você quer pagar (de R$ 1 a R$ 500)."); $("valor").focus(); return; }
+    }
     if (!navigator.geolocation) { alert("Seu celular não permite localização."); return; }
     btn.disabled = true;
     navigator.geolocation.getCurrentPosition(async pos => {
@@ -240,7 +244,7 @@ function iniciarCliente(user){
         lote.set(doc(db,"users",user.uid), marca, { merge:true });
         await lote.commit();
         avisarMotorista((u.nome||"Cliente").split(" ")[0]);
-        $("referencia").value = ""; $("destino").value = ""; $("valor").value = "";
+        $("referencia").value = ""; $("destino").value = ""; resetValores();
       } catch { alert("Você já fez 2 chamados seguidos. Espere 1 minuto e tente de novo."); }
       btn.disabled = false;
     }, err => {
@@ -409,8 +413,9 @@ function iniciarPainel(user, admin, perfil){
       const meu = !admin && c.motoristaId === EU.uid;
       return `<div class="chamado ${c.status==="finalizado"?"aceito":"fim"}"><h3>${esc(c.nome)}</h3>
         <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}${MOT_TXT[c.motivo] ? " ("+MOT_TXT[c.motivo]+")" : ""}${admin && c.motoristaNome ? "<br>Motorista: " + esc(c.motoristaNome) : ""}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}${c.nota ? `<br>Nota: <span class="val-av">${"★".repeat(c.nota)}${"☆".repeat(5 - c.nota)}</span>` : ""}</div>
-        ${c.status==="finalizado" && meu ? `<div class="acoes"><button class="b-ok" data-pix="1" style="grid-column:1/3">Receber por Pix</button></div>` : ""}</div>`;
+        </div>`;
     }).join("") : `<p class="vazio">Nenhuma corrida no histórico ainda.</p>`;
+    $("btn-receber-pix").classList.toggle("hidden", !(EU && !admin && hist.some(c => c.status === "finalizado" && c.motoristaId === EU.uid)));
     if (desenharMot) desenharMot();
   };
   const ouvir = (chave, q) => unsubs.push(onSnapshot(q, snap => {
@@ -630,6 +635,26 @@ $("lista").addEventListener("click", e => {
   if (gpsCod) deleteDoc(doc(db,"compartilhamentos",gpsCod)).catch(() => {});
   abaMot("hist");
 });
+// ---- Valores rápidos (R$ 5, 7, 10 ou Negociar) ----
+function resetValores(){
+  [...$("valores").children].forEach(x => x.classList.toggle("on", x.dataset.v === "10"));
+  $("campo-valor").classList.add("hidden"); $("valor").value = "10";
+  const s = document.querySelector("#btn-chamar .s"); if (s) s.textContent = "Você oferece R$ 10,00";
+}
+$("valores").addEventListener("click", e => {
+  const b = e.target.closest("button[data-v]"); if (!b) return;
+  [...$("valores").children].forEach(x => x.classList.toggle("on", x === b));
+  const neg = b.dataset.v === "n";
+  $("campo-valor").classList.toggle("hidden", !neg);
+  $("valor").value = neg ? "" : b.dataset.v;
+  const s = document.querySelector("#btn-chamar .s");
+  if (s) s.textContent = neg ? "Você digita quanto quer pagar" : "Você oferece R$ " + b.dataset.v + ",00";
+  if (neg) $("valor").focus();
+});
+// ---- Aviso de localização só até a pessoa permitir ----
+try { if (navigator.permissions) navigator.permissions.query({ name:"geolocation" }).then(p => { const ap = () => $("dica-loc").classList.toggle("hidden", p.state === "granted"); ap(); p.onchange = ap; }).catch(() => {}); } catch {}
+// ---- Botão único de Pix no histórico do motorista ----
+$("btn-receber-pix").onclick = () => { if (EU) abrirPix(EU.pixNome, EU.pix); };
 $("lista-hist").addEventListener("click", e => { if (e.target.closest("[data-pix]") && EU) abrirPix(EU.pixNome, EU.pix); });
 $("pix-fechar").onclick = () => $("pix-tela").classList.add("hidden");
 $("pix-copiar").onclick = async () => {
