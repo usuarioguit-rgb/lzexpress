@@ -418,7 +418,7 @@ function iniciarPainel(user, admin, perfil){
         <div class="info">${fmt(c.criadoEm)} · ${NOMES[c.status]}${MOT_TXT[c.motivo] ? " ("+MOT_TXT[c.motivo]+")" : ""}${admin && c.motoristaNome ? "<br>Motorista: " + esc(c.motoristaNome) : ""}${c.finalizadoEm ? `<br>Encerrada às ${fmt(c.finalizadoEm,true)}` : ""}${c.nota ? `<br>Nota: <span class="val-av">${"★".repeat(c.nota)}${"☆".repeat(5 - c.nota)}</span>` : ""}</div>
         </div>`;
     }).join("") : `<p class="vazio">Nenhuma corrida no histórico ainda.</p>`;
-    $("btn-receber-pix").classList.toggle("hidden", !(EU && !admin && hist.some(c => c.status === "finalizado" && c.motoristaId === EU.uid)));
+    $("btn-receber-pix").classList.toggle("hidden", !(EU && !admin));
     if (desenharMot) desenharMot();
   };
   const ouvir = (chave, q) => unsubs.push(onSnapshot(q, snap => {

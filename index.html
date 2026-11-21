@@ -48,7 +48,7 @@
       <button id="aba-criar" class="aba" type="button">Criar conta</button>
     </div>
     <div id="campos-cadastro" class="hidden">
-      <label>Seu nome</label><input id="nome" autocomplete="name" placeholder="Ex.: Maria Silva">
+      <label>Seu nome</label><input id="nome" autocomplete="name" placeholder="Ex: Maria Silva">
     </div>
     <label>E-mail</label><input id="email" type="email" autocomplete="email" placeholder="seuemail@gmail.com">
     <label>Senha</label><div class="senha-wrap"><input id="senha" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres"><button id="ver-senha" class="olho" type="button">Mostrar</button></div>
@@ -68,12 +68,12 @@
     <div id="aviso-offline" class="aviso hidden">🔴 O moto táxi está <b>offline</b> no momento. Tente de novo mais tarde.</div>
     <div id="bloco-chamar">
       <label for="referencia">Digite seu ponto de referência</label>
-      <div class="campo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><input id="referencia" maxlength="120" placeholder="Ex.: em frente à padaria, portão azul"></div>
+      <div class="campo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f2c25b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><input id="referencia" maxlength="120" placeholder="Ex: em frente à padaria, portão azul"></div>
       <label for="destino">Para onde vamos?</label>
-      <div class="campo"><input id="destino" maxlength="100" placeholder="Ex.: Mix Mateus"></div>
+      <div class="campo"><input id="destino" maxlength="100" placeholder="Ex: Mix Mateus"></div>
       <label for="valor">Negociar o valor</label>
       <div id="valores" class="valores"><button type="button" data-v="5">R$ 5</button><button type="button" data-v="7">R$ 7</button><button type="button" data-v="10">R$ 10</button><button type="button" data-v="n">Negociar</button></div>
-      <div id="campo-valor" class="campo hidden"><span style="color:#f2c25b;font-weight:700">R$</span><input id="valor" inputmode="decimal" maxlength="7" placeholder="Quanto você quer pagar? Ex.: 12" value=""></div>
+      <div id="campo-valor" class="campo hidden"><span style="color:#f2c25b;font-weight:700">R$</span><input id="valor" inputmode="decimal" maxlength="7" placeholder="Quanto você quer pagar? Ex: 10" value=""></div>
       <button id="btn-chamar" class="chamar" type="button"><span class="t">CHAMAR MOTO TÁXI</span><span class="s">Toque e um motorista vai até você</span></button>
     </div>
     <div id="st-passos" class="st-passos hidden"></div>
@@ -114,9 +114,9 @@
         <label>E-mail de login</label><input id="m-email" type="email" placeholder="motoboy@gmail.com">
         <label>Senha (mínimo 6)</label><input id="m-senha" placeholder="Senha do motoboy">
         <label>Data de nascimento</label><input id="m-nasc" type="date">
-        <label>Modelo da moto</label><input id="m-modelo" maxlength="40" placeholder="Ex.: Honda CG 160">
-        <label>Cor da moto</label><input id="m-cor" maxlength="20" placeholder="Ex.: Vermelha">
-        <label>Placa da moto</label><input id="m-placa" maxlength="8" placeholder="Ex.: ABC1D23">
+        <label>Modelo da moto</label><input id="m-modelo" maxlength="40" placeholder="Ex: Honda CG 160">
+        <label>Cor da moto</label><input id="m-cor" maxlength="20" placeholder="Ex: Vermelha">
+        <label>Placa da moto</label><input id="m-placa" maxlength="8" placeholder="Ex: ABC1D23">
         <label>Chave Pix dele</label><input id="m-pix" placeholder="CPF, e-mail, +55... ou chave aleatória">
         <p id="m-erro" class="erro"></p>
         <button id="btn-cad-mot" class="btn principal" type="button">Cadastrar motorista</button>
@@ -169,7 +169,7 @@
   <h2>Propor outro valor</h2>
   <p id="prop-oferta" class="sub"></p>
   <label for="prop-valor">Valor da sua proposta (R$)</label>
-  <input id="prop-valor" inputmode="decimal" maxlength="7" placeholder="Ex.: 5">
+  <input id="prop-valor" inputmode="decimal" maxlength="7" placeholder="Ex: 5">
   <p id="prop-erro" class="erro"></p>
   <button id="prop-enviar" class="btn principal" type="button">Enviar proposta</button>
   <button id="prop-voltar" class="btn neutro" type="button">Voltar</button>
@@ -180,9 +180,9 @@
   <p id="cad-info" class="sub"></p>
   <label>Nome completo</label><input id="c-nome" maxlength="80">
   <label>Data de nascimento</label><input id="c-nasc" type="date">
-  <label>Modelo da moto</label><input id="c-modelo" maxlength="40" placeholder="Ex.: Honda CG 160">
-  <label>Cor da moto</label><input id="c-cor" maxlength="20" placeholder="Ex.: Vermelha">
-  <label>Placa da moto</label><input id="c-placa" maxlength="8" placeholder="Ex.: ABC1D23">
+  <label>Modelo da moto</label><input id="c-modelo" maxlength="40" placeholder="Ex: Honda CG 160">
+  <label>Cor da moto</label><input id="c-cor" maxlength="20" placeholder="Ex: Vermelha">
+  <label>Placa da moto</label><input id="c-placa" maxlength="8" placeholder="Ex: ABC1D23">
   <label>Chave Pix</label><input id="c-pix" maxlength="80" placeholder="CPF, e-mail, +55... ou chave aleatória">
   <p id="c-erro" class="erro"></p>
   <button id="c-finalizar" class="btn principal" type="button">Finalizar</button>
@@ -268,6 +268,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script type="module" src="app.js?v=35"></script>
+<script type="module" src="app.js?v=36"></script>
 </body>
 </html>
